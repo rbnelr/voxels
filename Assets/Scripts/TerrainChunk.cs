@@ -1,10 +1,15 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
 using Unity.Collections;
 using UnityEngine;
 
 public class TerrainChunk {
+	static object _inited_threadpool = _init_threadpool();
+	static object _init_threadpool () {
+		ThreadPool.Initialize();
+		return null;
+	}
+
 	public const int SIZE = 64;
 
 	public struct Voxel { 
@@ -21,8 +26,6 @@ public class TerrainChunk {
 
 	public TerrainController terrain_controller;
 	
-	VoxelizeTask voxelize_task = null;
-	RemeshTask remesh_task = null;
 	
 	public static int calc_voxel_size (int lod) { // size of one voxel
 		int size = 1 << lod;
@@ -38,40 +41,70 @@ public class TerrainChunk {
 	public int resolution () { // voxels per chunk
 		return calc_resolution(lod);
 	}
+	
+	bool voxelize_queued = false;
+	bool remesh_queued = false;
+	
+	void queue_voxelize (int new_lod) {
+		ThreadPool.Push( new VoxelizeJob { chunk = this, pos = pos, lod = new_lod } );
 
-	public void update (int new_lod) {
-		bool need_remesh = false;
+		mesh_stale();
 
-		if (voxelize_task != null && voxelize_task.done) {
-			lod = voxelize_task.lod;
-			voxels = voxelize_task.voxels;
-			
-			voxelize_task = null;
+		voxelize_queued = true;
+	}
+	void queue_remesh () {
+		ThreadPool.Push( new RemeshJob { chunk = this, lod = lod, voxels = voxels } );
 
-			need_remesh = true;
+		remesh_queued = true;
+	}
+
+	void apply_voxelize (VoxelizeJob job) {
+		if (!terrain_controller.chunk_exists(job.chunk.pos)) {
+			return; // chunk was deleted since the job was queued, drop the result
 		}
 
-		if (new_lod != lod) {
-			if (voxelize_task == null && remesh_task == null) { // shedule voxelize job if not yet sheduled
-				voxelize_task = new VoxelizeTask { pos = pos, lod = new_lod };
-				if (!ThreadPool.QueueUserWorkItem(VoxelizeTask.Func, voxelize_task))
-					throw new System.SystemException("QueueUserWorkItem(VoxelizeTask) failed");
+		lod = job.lod;
+		voxels = job.voxels;
+				
+		queue_remesh();
 
-				mesh_stale();
+		voxelize_queued = false;
+	}
+	void apply_remesh (RemeshJob job) {
+		if (!terrain_controller.chunk_exists(job.chunk.pos)) {
+			return; // chunk was deleted since the job was queued, drop the result
+		}
+
+		mesh.Clear();
+
+		mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+		mesh.vertices = job.vertices;
+		mesh.normals = job.normals;
+		mesh.colors = job.colors;
+		mesh.triangles = job.indices;
+
+		mesh_no_longer_stale();
+		
+		remesh_queued = false;
+	}
+
+	public static void update_jobs () {
+		foreach (var result in ThreadPool.PopAll()) {
+			if (result is VoxelizeJob) {
+				var job = result as VoxelizeJob;
+				job.chunk.apply_voxelize(job);
+			} else if (result is RemeshJob) {
+				var job = result as RemeshJob;
+				job.chunk.apply_remesh(job);
 			}
 		}
-
-		if (need_remesh) {
-			remesh_task = new RemeshTask { lod = lod, voxels = voxels };
-			if (!ThreadPool.QueueUserWorkItem(RemeshTask.Func, remesh_task))
-				throw new System.SystemException("QueueUserWorkItem(RemeshTask) failed");
-		}
-
-		if (remesh_task != null && remesh_task.done) {
-			apply_remesh();
-			remesh_task = null;
-
-			mesh_no_longer_stale();
+	}
+	public void update (int new_lod) {
+		if (new_lod != lod) {
+			if (!voxelize_queued && !remesh_queued) {
+				queue_voxelize(new_lod);
+			}
 		}
 	}
 
@@ -81,20 +114,14 @@ public class TerrainChunk {
 	void mesh_no_longer_stale () {
 		mesh_renderer.material = terrain_controller.terrain_mat;
 	}
-
-	void apply_remesh () {
-		mesh.Clear();
-
-		mesh.vertices = remesh_task.verticies.ToArray();
-		mesh.normals = remesh_task.normals.ToArray();
-		mesh.colors = remesh_task.colors.ToArray();
-		mesh.triangles = remesh_task.indicies.ToArray();
-	}
 	
-	class VoxelizeTask {
-		public static void Func (object obj) {
-			((VoxelizeTask)obj).func();
-		}
+	static Color test_color (Vector3 pos_in_world) {
+		var c = Mathf.Clamp01(Mathf.Lerp(1,0, -pos_in_world.y / 300));
+		return new Color(1,c,c,1);
+	}
+
+	class VoxelizeJob : ThreadPool.IJob {
+		public TerrainChunk chunk;
 
 		// input
 		public Vector3Int pos;
@@ -102,48 +129,48 @@ public class TerrainChunk {
 		// output
 		public Voxel[,,] voxels;
 
-		public volatile bool done = false; // no idea if this is safe but fuck it, multithreading in c# is confusing
-
-		public void func () {
+		public void Execute () {
 			var generator = new TerrainGenerator();
 
 			int voxel_size = calc_voxel_size(lod);
 			int res = calc_resolution(lod);
 
-			voxels = new Voxel[res,res,res];
+			voxels = new Voxel[res+1, res+1,  res+1];
 
-			for (int z=0; z<res; ++z) {
-				for (int y=0; y<res; ++y) {
-					for (int x=0; x<res; ++x) {
+			for (int z=0; z<res+1; ++z) {
+				for (int y=0; y<res+1; ++y) {
+					for (int x=0; x<res+1; ++x) {
 						var voxel_index = new Vector3Int(x,y,z);
 						var pos_in_chunk = voxel_index * voxel_size;
 						var pos_in_world = pos_in_chunk + pos * SIZE;
+
 
 						voxels[z,y,x] = new Voxel { density = generator.get_density(pos_in_world) };
 					}
 				}
 			}
-
-			done = true;
 		}
 	}
 
-	class RemeshTask {
-		public static void Func (object obj) {
-			((RemeshTask)obj).func();
-		}
-
+	class RemeshJob : ThreadPool.IJob {
+		public TerrainChunk chunk;
+		
+		// input
 		public int lod;
 		public Voxel[,,] voxels;
-
-		public List<Vector3>	verticies	= new List<Vector3>();
-		public List<Vector3>	normals		= new List<Vector3>();
-		public List<Color>		colors		= new List<Color>();
-		public List<int>		indicies	= new List<int>();
 		
-		public volatile bool done = false;
+		// output
+		public Vector3[]	vertices;
+		public Vector3[]	normals;
+		public Color[]		colors;
+		public int[]		indices;
+		
+		public void Execute () {
+			var _vertices	= new List<Vector3>();
+			var _normals	= new List<Vector3>();
+			var _colors		= new List<Color>();
+			var _indices	= new List<int>();
 
-		public void func () {
 			int index_counter = 0;
 
 			int voxel_size = calc_voxel_size(lod);
@@ -181,10 +208,12 @@ public class TerrainChunk {
 							var voxel_index = new Vector3Int(x,y,z) + corner;
 							var pos_in_chunk = voxel_index * voxel_size;
 						
-							float density = dummy_density;
-							if (voxel_index.x < res && voxel_index.y < res && voxel_index.z < res) {
-								density = voxels[voxel_index.z, voxel_index.y, voxel_index.x].density;
-							}
+							//float density = dummy_density;
+							//if (voxel_index.x < res && voxel_index.y < res && voxel_index.z < res) {
+							//	density = voxels[voxel_index.z, voxel_index.y, voxel_index.x].density;
+							//}
+
+							var density = voxels[voxel_index.z, voxel_index.y, voxel_index.x].density;
 
 							gc.p[i] = pos_in_chunk;
 							gc.val[i] = density;
@@ -197,29 +226,32 @@ public class TerrainChunk {
 							var b = triangles[tri_i].p[1];
 							var c = triangles[tri_i].p[2];
 
-							verticies.Add(a);
-							verticies.Add(b);
-							verticies.Add(c);
+							_vertices.Add(a);
+							_vertices.Add(b);
+							_vertices.Add(c);
 
 							var normal = Vector3.Normalize(Vector3.Cross(b - a, c - a));
 						
-							normals.Add(normal);
-							normals.Add(normal);
-							normals.Add(normal);
+							_normals.Add(normal);
+							_normals.Add(normal);
+							_normals.Add(normal);
 
-							colors.Add(Color.white);
-							colors.Add(Color.white);
-							colors.Add(Color.white);
+							_colors.Add( test_color(a + chunk.pos * SIZE) );
+							_colors.Add( test_color(b + chunk.pos * SIZE) );
+							_colors.Add( test_color(c + chunk.pos * SIZE) );
 
-							indicies.Add(index_counter++);
-							indicies.Add(index_counter++);
-							indicies.Add(index_counter++);
+							_indices.Add(index_counter++);
+							_indices.Add(index_counter++);
+							_indices.Add(index_counter++);
 						}
 					}
 				}
 			}
-
-			done = true;
+			
+			vertices = _vertices.ToArray();
+			normals = _normals.ToArray();
+			colors = _colors.ToArray();
+			indices = _indices.ToArray();
 		}
 	}
 }

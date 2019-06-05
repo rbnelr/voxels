@@ -1,6 +1,5 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
 using UnityEngine;
 
 public class TerrainController : MonoBehaviour {
@@ -21,6 +20,10 @@ public class TerrainController : MonoBehaviour {
 	public Material terrain_mat;
 	public Material terrain_stale_mat;
 	
+	public bool chunk_exists (Vector3Int pos) {
+		return chunks.ContainsKey(pos);
+	}
+
 	void add_chunk (Vector3Int pos) {
 		var chunk_obj = Instantiate(terrain_chunk_prefab, this.gameObject.transform) as GameObject;
 		chunk_obj.transform.position = pos * TerrainChunk.SIZE;
@@ -32,29 +35,24 @@ public class TerrainController : MonoBehaviour {
 
 		chunk.terrain_controller = this;
 
-		GameObject DebugChunkOutlines = null;
-		foreach (Transform trs in chunk_obj.transform) {
-			if (trs.gameObject.name == "DebugChunkOutlines")
-				DebugChunkOutlines = trs.gameObject;
-		}
-		if (DebugChunkOutlines != null)
-			DebugChunkOutlines.transform.localScale = new Vector3(TerrainChunk.SIZE, TerrainChunk.SIZE, TerrainChunk.SIZE);
-		
+		//GameObject DebugChunkOutlines = null;
+		//foreach (Transform trs in chunk_obj.transform) {
+		//	if (trs.gameObject.name == "DebugChunkOutlines")
+		//		DebugChunkOutlines = trs.gameObject;
+		//}
+		//if (DebugChunkOutlines != null) {
+		//	DebugChunkOutlines.transform.localScale = new Vector3(TerrainChunk.SIZE, TerrainChunk.SIZE, TerrainChunk.SIZE);
+		//	DebugChunkOutlines.SetActive(false);
+		//}
 		chunks.Add(pos, chunk);
 	}
 	void remove_chunk (TerrainChunk chunk) {
 		Destroy(chunk.gameObject);
 		chunks.Remove(chunk.pos);
 	}
-
+	
 	void Start () {
-		{
-			int a, b, c, d;
-			ThreadPool.GetMinThreads(out a, out b);
-			ThreadPool.GetMaxThreads(out c, out d);
-			ThreadPool.SetMinThreads(1, 1);
-			ThreadPool.SetMaxThreads(1, 1);
-		}
+		
 	}
 	
 	float dist (Vector3Int chunk_pos, Vector3 player_pos) {
@@ -66,6 +64,28 @@ public class TerrainController : MonoBehaviour {
 		var nearest_pos_in_chunk = VectorExt.Clamp(player_pos, chunk_min, chunk_max);
 
 		return Vector3.Distance(nearest_pos_in_chunk, player_pos);
+	}
+
+	struct CubeEdge { public Vector3 a, b; }
+	static readonly CubeEdge[] cube_edges = new CubeEdge[12] {
+		new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(1,0,0) },
+		new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,1,0) },
+		new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(0,1,0) },
+		new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,0,0) },
+		
+		new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(0,0,1) },
+		new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,0,1) },
+		new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(1,1,1) },
+		new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,1,1) },
+
+		new CubeEdge { a = new Vector3(0,0,1), b = new Vector3(1,0,1) },
+		new CubeEdge { a = new Vector3(1,0,1), b = new Vector3(1,1,1) },
+		new CubeEdge { a = new Vector3(1,1,1), b = new Vector3(0,1,1) },
+		new CubeEdge { a = new Vector3(0,1,1), b = new Vector3(0,0,1) },
+	};
+	struct ChunkDist {
+		public TerrainChunk c;
+		public float dist;
 	}
 
 	void Update () {
@@ -102,8 +122,27 @@ public class TerrainController : MonoBehaviour {
 		foreach(var c in to_delete)
 			remove_chunk(c);
 		
+		TerrainChunk.update_jobs();
+		
+		//
+		#if false
+		var chunks_sorted = new List<ChunkDist>();
 		foreach (var chunk in chunks.Values) {
 			float dist_to_player = dist(chunk.pos, player_pos);
+			
+			chunks_sorted.Add(new ChunkDist { c = chunk, dist = dist_to_player });
+		}
+
+		chunks_sorted.Sort((l,r) => l.dist.CompareTo(r.dist));
+
+		foreach (var cd in chunks_sorted) {
+			var chunk = cd.c;
+			float dist_to_player = cd.dist;
+		#else
+		foreach (var chunk in chunks.Values) {
+			float dist_to_player = dist(chunk.pos, player_pos);
+			#endif
+
 			int lod = chunk_calc_lod(dist_to_player);
 
 			chunk.update(lod);

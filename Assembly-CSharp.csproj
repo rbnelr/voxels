@@ -66,6 +66,7 @@
     <Compile Include="Assets\Scripts\TerrainChunk.cs" />
     <Compile Include="Assets\Scripts\TerrainController.cs" />
     <Compile Include="Assets\Scripts\TerrainGenerator.cs" />
+    <Compile Include="Assets\Scripts\ThreadPool.cs" />
     <Compile Include="Assets\Scripts\VectorExt.cs" />
     <None Include="Assets\Terrain.shader" />
     <None Include="Assets\CoherentNoise\readme.txt" />
