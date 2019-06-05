@@ -259,3 +259,17 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+/Library/metadata
+/Library/ScriptAssemblies
+/Library/ShaderCache
+/Library
+/ProjectSettings
+/Assets/Scenes
+/Assets/CoherentNoise
+/Assets/AssetStoreTools/Editor
+/Temp
+/Assets/TerrainStale.mat
+/Assets/TerrainChunkPrefab.prefab
+/Assets/Terrain.mat
+/Assets/Player.mat
+/Assets/chunk_gen_test_scene.unity
