@@ -3,33 +3,51 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class MarchingCubes {
+	
+	public struct Vertex {
+		public Vector3 pos;
+		public Color	color;
+
+		public static Vertex Lerp (Vertex a, Vertex b, float t) {
+			a.pos   = a.pos   + (b.pos   - a.pos  ) * t;
+			a.color = a.color + (b.color - a.color) * t;
+			return a;
+		}
+	}
+	
+	public static readonly Vector3Int[] corners = new Vector3Int[8] {
+		new Vector3Int(0,1,0),
+		new Vector3Int(1,1,0),
+		new Vector3Int(1,0,0),
+		new Vector3Int(0,0,0),
+		new Vector3Int(0,1,1),
+		new Vector3Int(1,1,1),
+		new Vector3Int(1,0,1),
+		new Vector3Int(0,0,1),
+	};
 
 	// http://paulbourke.net/geometry/polygonise/
 	public struct Triangle {
-		public Vector3[] p; // 3
+		public Vertex[] vert; // 3
 	};
 
 	public struct Gridcell {
-		public Vector3[] p; // 8
+		public Vertex[] vert; // 8
 		public float[] val; // 8
 	};
 
 	// Linearly interpolate the position where an isosurface cuts an edge between two vertices, each with their own scalar value
-	static Vector3 VertexInterp (float isolevel, Vector3 p1, Vector3 p2, float valp1, float valp2) {
+	static Vertex VertexInterp (float isolevel, Vertex v1, Vertex v2, float valp1, float valp2) {
 		if (Mathf.Abs(isolevel - valp1) < 0.00001f)
-			return(p1);
+			return(v1);
 		if (Mathf.Abs(isolevel - valp2) < 0.00001f)
-			return(p2);
+			return(v2);
 		if (Mathf.Abs(valp1 - valp2) < 0.00001f)
-			return(p1);
+			return(v1);
+		
 		float mu = (isolevel - valp1) / (valp2 - valp1);
 		
-		var p = new Vector3();
-		p.x = p1.x + mu * (p2.x - p1.x);
-		p.y = p1.y + mu * (p2.y - p1.y);
-		p.z = p1.z + mu * (p2.z - p1.z);
-
-		return(p);
+		return Vertex.Lerp(v1, v2, mu);
 	}
 
 	/*
@@ -332,6 +350,20 @@ public class MarchingCubes {
 		{0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 		{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
 	};
+	readonly static int[,] edgeVertTable = new int[12,2] {
+		{ 0,1 },
+		{ 1,2 },
+		{ 2,3 },
+		{ 3,0 },
+		{ 4,5 },
+		{ 5,6 },
+		{ 6,7 },
+		{ 7,4 },
+		{ 0,4 },
+		{ 1,5 },
+		{ 2,6 },
+		{ 3,7 },
+	};
 
 	public static int Polygonise (Gridcell grid, float isolevel, ref Triangle[] triangles) {
 		/*
@@ -339,41 +371,32 @@ public class MarchingCubes {
 		tells us which vertices are inside of the surface
 		*/
 		int cubeindex = 0;
-		if (grid.val[0] > isolevel) cubeindex |= 1;
-		if (grid.val[1] > isolevel) cubeindex |= 2;
-		if (grid.val[2] > isolevel) cubeindex |= 4;
-		if (grid.val[3] > isolevel) cubeindex |= 8;
-		if (grid.val[4] > isolevel) cubeindex |= 16;
-		if (grid.val[5] > isolevel) cubeindex |= 32;
-		if (grid.val[6] > isolevel) cubeindex |= 64;
-		if (grid.val[7] > isolevel) cubeindex |= 128;
+		for (int i=0; i<8; ++i) {
+			if (grid.val[i] < isolevel)
+				cubeindex |= 1 << i;
+		}
 
 		/* Cube is entirely in/out of the surface */
 		if (edgeTable[cubeindex] == 0)
 			return(0);
 
 		/* Find the vertices where the surface intersects the cube */
-		Vector3[] vertlist = new Vector3[12];
-
-		if ((edgeTable[cubeindex] &    1) != 0)	vertlist[ 0] = VertexInterp(isolevel, grid.p[0], grid.p[1], grid.val[0], grid.val[1]);
-		if ((edgeTable[cubeindex] &    2) != 0)	vertlist[ 1] = VertexInterp(isolevel, grid.p[1], grid.p[2], grid.val[1], grid.val[2]);
-		if ((edgeTable[cubeindex] &    4) != 0)	vertlist[ 2] = VertexInterp(isolevel, grid.p[2], grid.p[3], grid.val[2], grid.val[3]);
-		if ((edgeTable[cubeindex] &    8) != 0)	vertlist[ 3] = VertexInterp(isolevel, grid.p[3], grid.p[0], grid.val[3], grid.val[0]);
-		if ((edgeTable[cubeindex] &   16) != 0)	vertlist[ 4] = VertexInterp(isolevel, grid.p[4], grid.p[5], grid.val[4], grid.val[5]);
-		if ((edgeTable[cubeindex] &   32) != 0)	vertlist[ 5] = VertexInterp(isolevel, grid.p[5], grid.p[6], grid.val[5], grid.val[6]);
-		if ((edgeTable[cubeindex] &   64) != 0)	vertlist[ 6] = VertexInterp(isolevel, grid.p[6], grid.p[7], grid.val[6], grid.val[7]);
-		if ((edgeTable[cubeindex] &  128) != 0)	vertlist[ 7] = VertexInterp(isolevel, grid.p[7], grid.p[4], grid.val[7], grid.val[4]);
-		if ((edgeTable[cubeindex] &  256) != 0)	vertlist[ 8] = VertexInterp(isolevel, grid.p[0], grid.p[4], grid.val[0], grid.val[4]);
-		if ((edgeTable[cubeindex] &  512) != 0)	vertlist[ 9] = VertexInterp(isolevel, grid.p[1], grid.p[5], grid.val[1], grid.val[5]);
-		if ((edgeTable[cubeindex] & 1024) != 0)	vertlist[10] = VertexInterp(isolevel, grid.p[2], grid.p[6], grid.val[2], grid.val[6]);
-		if ((edgeTable[cubeindex] & 2048) != 0)	vertlist[11] = VertexInterp(isolevel, grid.p[3], grid.p[7], grid.val[3], grid.val[7]);
+		Vertex[] vertlist = new Vertex[12];
+		
+		for (int i=0; i<12; ++i) {
+			if ((edgeTable[cubeindex] & (1 << i)) != 0) {
+				int a = edgeVertTable[i,0];
+				int b = edgeVertTable[i,1];
+				vertlist[i] = VertexInterp(isolevel, grid.vert[a], grid.vert[b], grid.val[a], grid.val[b]);
+			}
+		}
 
 		/* Create the triangle */
 		int ntriang = 0;
 		for (int i = 0; triTable[cubeindex,i] != -1; i += 3) {
-			triangles[ntriang].p[0] = vertlist[triTable[cubeindex, i +0]];
-			triangles[ntriang].p[1] = vertlist[triTable[cubeindex, i +1]];
-			triangles[ntriang].p[2] = vertlist[triTable[cubeindex, i +2]];
+			triangles[ntriang].vert[0] = vertlist[triTable[cubeindex, i +0]];
+			triangles[ntriang].vert[1] = vertlist[triTable[cubeindex, i +1]];
+			triangles[ntriang].vert[2] = vertlist[triTable[cubeindex, i +2]];
 			ntriang++;
 		}
 

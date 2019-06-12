@@ -66,23 +66,23 @@ public class TerrainController : MonoBehaviour {
 		return Vector3.Distance(nearest_pos_in_chunk, player_pos);
 	}
 
-	struct CubeEdge { public Vector3 a, b; }
-	static readonly CubeEdge[] cube_edges = new CubeEdge[12] {
-		new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(1,0,0) },
-		new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,1,0) },
-		new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(0,1,0) },
-		new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,0,0) },
-		
-		new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(0,0,1) },
-		new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,0,1) },
-		new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(1,1,1) },
-		new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,1,1) },
-
-		new CubeEdge { a = new Vector3(0,0,1), b = new Vector3(1,0,1) },
-		new CubeEdge { a = new Vector3(1,0,1), b = new Vector3(1,1,1) },
-		new CubeEdge { a = new Vector3(1,1,1), b = new Vector3(0,1,1) },
-		new CubeEdge { a = new Vector3(0,1,1), b = new Vector3(0,0,1) },
-	};
+	//struct CubeEdge { public Vector3 a, b; }
+	//static readonly CubeEdge[] cube_edges = new CubeEdge[12] {
+	//	new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(1,0,0) },
+	//	new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,1,0) },
+	//	new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(0,1,0) },
+	//	new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,0,0) },
+	//	
+	//	new CubeEdge { a = new Vector3(0,0,0), b = new Vector3(0,0,1) },
+	//	new CubeEdge { a = new Vector3(1,0,0), b = new Vector3(1,0,1) },
+	//	new CubeEdge { a = new Vector3(1,1,0), b = new Vector3(1,1,1) },
+	//	new CubeEdge { a = new Vector3(0,1,0), b = new Vector3(0,1,1) },
+	//
+	//	new CubeEdge { a = new Vector3(0,0,1), b = new Vector3(1,0,1) },
+	//	new CubeEdge { a = new Vector3(1,0,1), b = new Vector3(1,1,1) },
+	//	new CubeEdge { a = new Vector3(1,1,1), b = new Vector3(0,1,1) },
+	//	new CubeEdge { a = new Vector3(0,1,1), b = new Vector3(0,0,1) },
+	//};
 	struct ChunkDist {
 		public TerrainChunk c;
 		public float dist;
@@ -125,7 +125,7 @@ public class TerrainController : MonoBehaviour {
 		TerrainChunk.update_jobs();
 		
 		//
-		#if false
+		#if true
 		var chunks_sorted = new List<ChunkDist>();
 		foreach (var chunk in chunks.Values) {
 			float dist_to_player = dist(chunk.pos, player_pos);

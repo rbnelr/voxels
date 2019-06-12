@@ -7,7 +7,7 @@ public class ThreadPool {
 		void Execute ();
 	}
 
-	static System.Threading.Thread[] pool;
+	//static System.Threading.Thread[] pool;
 	static ThreadSafeQueue<IJob> input = new ThreadSafeQueue<IJob>();
 	static ThreadSafeQueue<IJob> output = new ThreadSafeQueue<IJob>();
 
@@ -26,7 +26,7 @@ public class ThreadPool {
 			thread.Start();
 		}
 
-		pool = threads.ToArray();
+		//pool = threads.ToArray();
 	}
 
 	public static void Push (IJob job) {

@@ -116,8 +116,11 @@ public class TerrainChunk {
 	}
 	
 	static Color test_color (Vector3 pos_in_world) {
-		var c = Mathf.Clamp01(Mathf.Lerp(1,0, -pos_in_world.y / 300));
-		return new Color(1,c,c,1);
+		//var c = Mathf.Clamp01(Mathf.Lerp(1,0, -pos_in_world.y / 300));
+		//var generator = new TerrainGenerator();
+		//var c = generator.stalactite_test(pos_in_world);
+		//return new Color(1,c,c,1);
+		return new Color(1,1,1,1);
 	}
 
 	class VoxelizeJob : ThreadPool.IJob {
@@ -176,7 +179,7 @@ public class TerrainChunk {
 			int voxel_size = calc_voxel_size(lod);
 			int res = calc_resolution(lod);
 		
-			float dummy_density = 0.0f;
+			//float dummy_density = 0.0f;
 
 			Vector3Int[] corners = new Vector3Int[8] {
 				new Vector3Int(0,1,0),
@@ -190,14 +193,14 @@ public class TerrainChunk {
 			};
 
 			MarchingCubes.Triangle[] triangles = new MarchingCubes.Triangle[5] {
-				new MarchingCubes.Triangle { p = new Vector3[3] },
-				new MarchingCubes.Triangle { p = new Vector3[3] },
-				new MarchingCubes.Triangle { p = new Vector3[3] },
-				new MarchingCubes.Triangle { p = new Vector3[3] },
-				new MarchingCubes.Triangle { p = new Vector3[3] },
+				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
+				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
+				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
+				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
+				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
 			};
 
-			var gc = new MarchingCubes.Gridcell { p = new Vector3[8], val = new float[8] };
+			var gc = new MarchingCubes.Gridcell { vert = new MarchingCubes.Vertex[8], val = new float[8] };
 
 			for (int z=0; z<res; ++z) {
 				for (int y=0; y<res; ++y) {
@@ -215,16 +218,17 @@ public class TerrainChunk {
 
 							var density = voxels[voxel_index.z, voxel_index.y, voxel_index.x].density;
 
-							gc.p[i] = pos_in_chunk;
+							gc.vert[i].pos = pos_in_chunk;
+							gc.vert[i].color = Color.white;
 							gc.val[i] = density;
 						}
 
 						int tri_count = MarchingCubes.Polygonise(gc, 0.0f, ref triangles);
 
 						for (int tri_i=0; tri_i<tri_count; ++tri_i) {
-							var a = triangles[tri_i].p[0];
-							var b = triangles[tri_i].p[1];
-							var c = triangles[tri_i].p[2];
+							var a = triangles[tri_i].vert[0].pos;
+							var b = triangles[tri_i].vert[1].pos;
+							var c = triangles[tri_i].vert[2].pos;
 
 							_vertices.Add(a);
 							_vertices.Add(b);
