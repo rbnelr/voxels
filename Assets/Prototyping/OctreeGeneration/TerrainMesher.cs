@@ -66,6 +66,18 @@ namespace OctreeGeneration {
 					for (int x=0; x<ChunkVoxels; ++x) {
 						if (voxelInChild(node, ChunkVoxels, x,y,z))
 							continue;
+						{
+							
+							var pos_local = new Vector3(x,y,z);
+							pos_local *= (node.size / ChunkVoxels);
+							pos_local += -new Vector3(node.size,node.size,node.size) * 0.5f;
+
+							var pos_world = pos_local + node.pos;
+
+							if (pos_world.x == -304 && pos_world.y == 16 && pos_world.z == -80) {
+								int a = 5;
+							}
+						}
 						
 						for (int i=0; i<8; ++i) {
 							var voxel_index = new Vector3Int(x,y,z) + MarchingCubes.corners[i];

@@ -249,9 +249,9 @@ namespace OctreeGeneration {
 			}
 		}
 		void OnDrawGizmosSelected () {
-			//_countNodes = 0;
-			//if (root != null)
-			//	drawNode(root);
+			_countNodes = 0;
+			if (root != null)
+				drawNode(root);
 		}
 
 		void OnDrawGizmos () {
@@ -269,9 +269,9 @@ namespace OctreeGeneration {
 			//	}
 			//}
 			
-			_countNodes = 0;
-			if (root != null)
-				drawNode(root);
+			//_countNodes = 0;
+			//if (root != null)
+			//	drawNode(root);
 		}
 
 		void OnGUI () {

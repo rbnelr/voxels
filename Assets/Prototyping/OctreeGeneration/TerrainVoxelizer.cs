@@ -17,6 +17,10 @@ namespace OctreeGeneration {
 						pos_world *= (node.size / ChunkVoxels);
 						pos_world += -new Vector3(node.size,node.size,node.size) * 0.5f + node.pos;
 						
+						if (pos_world.x == -304 && pos_world.y >= 16 && pos_world.y <= 48 && pos_world.z == -80) {
+							int a = 5;
+						}
+
 						node.voxels[z,y,x] = gen.Generate(pos_world);
 					}
 				}
