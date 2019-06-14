@@ -186,7 +186,6 @@ MonoBehaviour:
     m_NumColorKeys: 5
     m_NumAlphaKeys: 2
   type: 0
-  generator: {fileID: 599194209}
 --- !u!64 &97099080
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -259,7 +258,7 @@ Transform:
   m_LocalScale: {x: 800, y: 800, z: 800}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 6
+  m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!1 &149123920
 GameObject:
@@ -352,79 +351,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
---- !u!1 &599194208
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 599194210}
-  - component: {fileID: 599194209}
-  m_Layer: 0
-  m_Name: TerrainGenerator
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &599194209
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 599194208}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b6d19142c3e5cb428d645d048f2e806, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  coloring:
-    serializedVersion: 2
-    key0: {r: 0.357, g: 0.357, b: 1, a: 1}
-    key1: {r: 1, g: 1, b: 1, a: 1}
-    key2: {r: 1, g: 0.357, b: 0.357, a: 0}
-    key3: {r: 0, g: 0, b: 0, a: 0}
-    key4: {r: 0, g: 0, b: 0, a: 0}
-    key5: {r: 0, g: 0, b: 0, a: 0}
-    key6: {r: 0, g: 0, b: 0, a: 0}
-    key7: {r: 0, g: 0, b: 0, a: 0}
-    ctime0: 0
-    ctime1: 32768
-    ctime2: 65535
-    ctime3: 0
-    ctime4: 0
-    ctime5: 0
-    ctime6: 0
-    ctime7: 0
-    atime0: 0
-    atime1: 65535
-    atime2: 0
-    atime3: 0
-    atime4: 0
-    atime5: 0
-    atime6: 0
-    atime7: 0
-    m_Mode: 0
-    m_NumColorKeys: 3
-    m_NumAlphaKeys: 2
-  hasChanged: 0
---- !u!4 &599194210
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 599194208}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_RootOrder: 3
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &914998215
 GameObject:
   m_ObjectHideFlags: 0
@@ -451,18 +377,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 914998215}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bfc750262f6e39542b826b36a4fbb421, type: 3}
+  m_Script: {fileID: 11500000, guid: 8804607c774423a4cb61202f61439da4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  TerrainChunkPrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
-    type: 3}
-  generator: {fileID: 599194209}
-  player: {fileID: 1431956234}
-  test: {fileID: 942743130}
-  testDir: {x: 1, y: 0, z: 0}
-  VoxelSize: 2
+  VoxelSize: 1
   ChunkVoxels: 32
   MaxLod: 7
+  LodFuncStart: 0.9
+  LodFuncEnd: 16
+  LodFuncEndLod: 8
+  TerrainChunkPrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
+    type: 3}
+  player: {fileID: 1431956234}
+  AlwaysDrawOctree: 1
 --- !u!4 &914998217
 Transform:
   m_ObjectHideFlags: 0
@@ -475,7 +402,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 4
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &916012521
 GameObject:
@@ -650,7 +577,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 5
+  m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1431956234
 GameObject:
@@ -738,7 +665,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1431956234}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -78.70836, y: -430.35745, z: 254.36707}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -810,7 +737,6 @@ MonoBehaviour:
     m_NumColorKeys: 5
     m_NumAlphaKeys: 2
   type: 0
-  generator: {fileID: 599194209}
 --- !u!64 &2071787416
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -883,5 +809,5 @@ Transform:
   m_LocalScale: {x: 3000, y: 10000, z: 20}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 7
+  m_RootOrder: 6
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}

@@ -1,11 +1,9 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using Unity.Jobs;
+﻿using Unity.Jobs;
 using Unity.Mathematics;
 using static Unity.Mathematics.math;
-using static MyMath;
 using Unity.Collections;
+using UnityEngine;
+using System.Collections.Generic;
 
 namespace OctreeGeneration {
 	public struct Voxel {
@@ -122,15 +120,12 @@ namespace OctreeGeneration {
 	}
 
 	public struct TerrainVoxelizeJob : IJobParallelFor {
-		// input
-		public float3 ChunkPos;
-		public float ChunkSize;
-		public int ChunkVoxels;
-
-		public TerrainGenerator Gen;
-
-		// output
-		public NativeArray<Voxel> Voxels;
+		[ReadOnly] public float3 ChunkPos;
+		[ReadOnly] public float ChunkSize;
+		[ReadOnly] public int ChunkVoxels;
+		[ReadOnly] public TerrainGenerator Gen;
+		
+		[WriteOnly] public NativeArray<Voxel> Voxels;
 
 		public void Execute (int i) {
 			int ArraySize = ChunkVoxels + 1;
@@ -149,5 +144,47 @@ namespace OctreeGeneration {
 						
 			Voxels[voxelIndex] = Gen.Generate(pos_world);
 		}
+	}
+	
+	public class TerrainVoxelizer {
+		Dictionary<TerrainChunk, JobHandle> jobs = new Dictionary<TerrainChunk, JobHandle>();
+
+		public int MaxJobs = 2;
+
+		//public void StartJob (TerrainChunk chunk, int ChunkVoxels, TerrainGenerator gen) {
+		//	int ArraySize = ChunkVoxels + 1;
+		//	int voxelsLength = ArraySize * ArraySize * ArraySize;
+		//
+		//	chunk.voxels?.Dispose();
+		//	chunk.voxels = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent);
+		//
+		//	var job = new TerrainVoxelizeJob {
+		//		ChunkPos = chunk.pos,
+		//		ChunkSize = chunk.size,
+		//		ChunkVoxels = ChunkVoxels,
+		//		Gen = gen,
+		//		Voxels = chunk.voxels.Value
+		//	};
+		//	jobHandle = job.Schedule(voxelsLength, ChunkVoxels);
+		//}
+		//public void Update (TerrainChunk chunk) {
+		//	if (jobHandle != null && jobHandle.Value.IsCompleted) {
+		//		jobHandle.Value.Complete();
+		//		jobHandle = null;
+		//
+		//		chunk.needsRemesh = true;
+		//	
+		//		if (chunk.parent != null)
+		//			chunk.parent.needsRemesh = true;
+		//	}
+		//}
+		//
+		//public void Dispose () {
+		//	if (jobHandle != null) {
+		//		Debug.Log("TerrainVoxelizer.Dispose(): Job still running, need to wait for it to complete inorder to Dispose of the native arrays");
+		//		jobHandle.Value.Complete();
+		//		jobHandle = null;
+		//	}
+		//}
 	}
 }

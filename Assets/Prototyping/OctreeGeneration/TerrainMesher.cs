@@ -1,25 +1,29 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using Unity.Jobs;
 using Unity.Mathematics;
 using static Unity.Mathematics.math;
+using Unity.Collections;
+using UnityEngine;
 
 namespace OctreeGeneration {
-	public class TerrainMesher {
-		static bool voxelInChild (TerrainChunk node, int ChunkVoxels, int x, int y, int z) { // x,y,z: voxel index
-			return node.getChild(	x / (ChunkVoxels / 2),
-									y / (ChunkVoxels / 2),
-									z / (ChunkVoxels / 2)) != null;
+	public struct TerrainMeshJob : IJob {
+		[ReadOnly] public float3 ChunkPos;
+		[ReadOnly] public float ChunkSize;
+		[ReadOnly] public int ChunkVoxels;
+		[ReadOnly] public NativeArray<Voxel> Voxels;
+
+		[WriteOnly] public NativeList<Vector3>	vertices;
+		[WriteOnly] public NativeList<Color>	colors;
+		[WriteOnly] public NativeList<Vector2>	uv;
+		[WriteOnly] public NativeList<int>		triangles;
+
+		bool voxelInChild (TerrainChunk node, int ChunkVoxels, int x, int y, int z) { // x,y,z: voxel index
+			//return node.getChild(	x / (ChunkVoxels / 2),
+			//						y / (ChunkVoxels / 2),
+			//						z / (ChunkVoxels / 2)) != null;
+			return false;
 		}
 
-		public static void Meshize (TerrainChunk node, int ChunkVoxels, TerrainController tc) {
-			var sw = new System.Diagnostics.Stopwatch();
-			sw.Start();
-
-			var vertices = new List<Vector3>();
-			var colors = new List<Color>();
-			var uv = new List<Vector2>();
-			var triangles = new List<int>();
+		public void Execute () {
 			int index_counter = 0;
 
 			var cell = new MarchingCubes.Gridcell { vert = new MarchingCubes.Vertex[8], val = new float[8] };
@@ -34,27 +38,19 @@ namespace OctreeGeneration {
 			for (int z=0; z<ChunkVoxels; ++z) {
 				for (int y=0; y<ChunkVoxels; ++y) {
 					for (int x=0; x<ChunkVoxels; ++x) {
-						if (voxelInChild(node, ChunkVoxels, x,y,z))
-							continue;
-						{
-							
-							var pos_local = new float3(x,y,z);
-							pos_local *= (node.size / ChunkVoxels);
-							pos_local += -new float3(node.size,node.size,node.size) * 0.5f;
-
-							var pos_world = pos_local + node.pos;
-						}
+						//if (voxelInChild(node, ChunkVoxels, x,y,z))
+						//	continue;
 						
 						for (int i=0; i<8; ++i) {
 							var voxel_index = new int3(x,y,z) + MarchingCubes.corners[i];
 							
 							var pos_local = (float3)voxel_index;
-							pos_local *= (node.size / ChunkVoxels);
-							pos_local += -new float3(node.size,node.size,node.size) * 0.5f;
+							pos_local *= ChunkSize / ChunkVoxels;
+							pos_local -= ChunkSize * 0.5f;
 
-							var pos_world = pos_local + node.pos;
+							var pos_world = pos_local + ChunkPos;
 							
-							var voxel = node.GetVoxel(voxel_index, ChunkVoxels);
+							var voxel = TerrainChunk.GetVoxel(ref Voxels, voxel_index, ChunkVoxels);
 
 							cell.vert[i].pos = pos_local;
 							cell.vert[i].color = Color.white;
@@ -88,16 +84,69 @@ namespace OctreeGeneration {
 				}
 			}
 
-			node.mesh.Clear();
-			node.mesh.vertices = vertices.ToArray();
-			node.mesh.colors = colors.ToArray();
-			node.mesh.uv = uv.ToArray();
-			node.mesh.triangles = triangles.ToArray();
-			node.mesh.RecalculateNormals();
-			
-			sw.Stop();
-			
-			Debug.Log("TerrainMesher.Meshize(): took "+ sw.Elapsed.TotalMilliseconds +" ms ");
 		}
+	}
+
+	public struct TerrainMesher {
+		//public JobHandle? jobHandle;
+		//
+		//NativeList<Vector3>?	vertices;
+		//NativeList<Color>?		colors;
+		//NativeList<Vector2>?	uv;
+		//NativeList<int>?		triangles;
+		//
+		//public void StartJob (TerrainChunk chunk, int ChunkVoxels) {
+		//	vertices	= new NativeList<Vector3>(	Allocator.Persistent );
+		//	colors		= new NativeList<Color>(	Allocator.Persistent );
+		//	uv			= new NativeList<Vector2>(	Allocator.Persistent );
+		//	triangles	= new NativeList<int>(		Allocator.Persistent );
+		//
+		//	var job = new TerrainMeshJob {
+		//		ChunkPos = chunk.pos,
+		//		ChunkSize = chunk.size,
+		//		ChunkVoxels = ChunkVoxels,
+		//		Voxels = chunk.voxels.Value,
+		//		
+		//		vertices	= vertices.Value,
+		//		colors		= colors.Value,
+		//		uv			= uv.Value,
+		//		triangles	= triangles.Value,
+		//	};
+		//	jobHandle = job.Schedule();
+		//}
+		//
+		//public void Update (TerrainChunk chunk) {
+		//	if (jobHandle != null && jobHandle.Value.IsCompleted) {
+		//		jobHandle.Value.Complete();
+		//		jobHandle = null;
+		//
+		//		chunk.needsRemesh = false;
+		//		
+		//		chunk.mesh.Clear();
+		//		chunk.mesh.vertices		= vertices.Value.ToArray();
+		//		chunk.mesh.colors		= colors.Value.ToArray();
+		//		chunk.mesh.uv			= uv.Value.ToArray();
+		//		chunk.mesh.triangles	= triangles.Value.ToArray();
+		//		chunk.mesh.RecalculateNormals();
+		//
+		//		vertices	.Value.Dispose();
+		//		colors		.Value.Dispose();
+		//		uv			.Value.Dispose();
+		//		triangles	.Value.Dispose();
+		//	}
+		//}
+		//
+		//public void Dispose () {
+		//	if (jobHandle != null) {
+		//		Debug.Log("TerrainMesher.Dispose(): Job still running, need to wait for it to complete inorder to Dispose of the native arrays");
+		//		jobHandle.Value.Complete();
+		//		jobHandle = null;
+		//	}
+		//
+		//	vertices?.Dispose();
+		//	colors?.Dispose();
+		//	uv?.Dispose();
+		//	triangles?.Dispose();
+		//}
 	}
 }
