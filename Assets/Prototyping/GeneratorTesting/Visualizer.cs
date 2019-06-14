@@ -65,7 +65,7 @@ namespace GeneratorTesting {
 					Color col = Color.magenta;
 					switch (type) {
 						case VisualizeType.Density:
-							col = coloring.Evaluate(MyMath.MapClamp(sample.density, coloringRange.rangeStart, coloringRange.rangeEnd));
+							col = coloring.Evaluate(MyMath.mapClamp(sample.density, coloringRange.rangeStart, coloringRange.rangeEnd));
 							break;
 						case VisualizeType.Color:
 							col = sample.color;

@@ -45,16 +45,16 @@ public static class VectorExt {
 }
 
 public static class MyMath {
-	public static float Map (float x, float in_a, float in_b) {
+	public static float map (float x, float in_a, float in_b) {
 		return (x - in_a) / (in_b - in_a);
 	}
-	public static float Map (float x, float in_a, float in_b, float out_a, float out_b) {
+	public static float map (float x, float in_a, float in_b, float out_a, float out_b) {
 		return (x - in_a) / (in_b - in_a) * (out_b - out_a) + out_a;
 	}
-	public static float MapClamp (float x, float in_a, float in_b) {
+	public static float mapClamp (float x, float in_a, float in_b) {
 		return Mathf.Clamp01((x - in_a) / (in_b - in_a));
 	}
-	public static float MapClamp (float x, float in_a, float in_b, float out_a, float out_b) {
+	public static float mapClamp (float x, float in_a, float in_b, float out_a, float out_b) {
 		return Mathf.Clamp01((x - in_a) / (in_b - in_a)) * (out_b - out_a) + out_a;
 	}
 }

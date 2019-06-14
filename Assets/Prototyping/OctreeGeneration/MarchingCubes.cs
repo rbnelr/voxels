@@ -1,13 +1,15 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Mathematics;
+using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
 	public class MarchingCubes {
 	
 		public struct Vertex {
-			public Vector3 pos;
-			public Color	color;
+			public float3 pos;
+			public Color  color;
 
 			public static Vertex Lerp (Vertex a, Vertex b, float t) {
 				a.pos   = a.pos   + (b.pos   - a.pos  ) * t;
@@ -16,15 +18,15 @@ namespace OctreeGeneration {
 			}
 		}
 	
-		public static readonly Vector3Int[] corners = new Vector3Int[8] {
-			new Vector3Int(0,1,0),
-			new Vector3Int(1,1,0),
-			new Vector3Int(1,0,0),
-			new Vector3Int(0,0,0),
-			new Vector3Int(0,1,1),
-			new Vector3Int(1,1,1),
-			new Vector3Int(1,0,1),
-			new Vector3Int(0,0,1),
+		public static readonly int3[] corners = new int3[8] {
+			new int3(0,1,0),
+			new int3(1,1,0),
+			new int3(1,0,0),
+			new int3(0,0,0),
+			new int3(0,1,1),
+			new int3(1,1,1),
+			new int3(1,0,1),
+			new int3(0,0,1),
 		};
 
 		// http://paulbourke.net/geometry/polygonise/

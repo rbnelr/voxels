@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static MyMath;
 
 public class TerrainGenerator {
 	
@@ -20,16 +21,16 @@ public class TerrainGenerator {
 		float cave = cave_isolevel;
 		cave += noise[0].GetValue(pos / 120) * (1.0f / 1) + (1.0f / 5);
 		cave += noise[1].GetValue(pos / 50) * (1.0f / 4);
-		cave += noise[2].GetValue(pos / 10) * Mathf.Max(0.0f, MyMath.Map(noise[3].GetValue(pos / 70), -1,+1, -0.5f, 2.0f)) / 16;
+		cave += noise[2].GetValue(pos / 10) * Mathf.Max(0.0f, MyMath.map(noise[3].GetValue(pos / 70), -1,+1, -0.5f, 2.0f)) / 16;
 		
-		float stalactite_fac = Mathf.Max(0.0f, MyMath.Map(noise[3].GetValue(pos / 150), -1,+1, -1f, 1.2f));
+		float stalactite_fac = Mathf.Max(0.0f, MyMath.map(noise[3].GetValue(pos / 150), -1,+1, -1f, 1.2f));
 
 		float stalactite = stalactite_test(pos);
 		cave += stalactite * stalactite_fac * 0.5f;
 
 		float terrain = terrain_height -pos.y;
 
-		float density = Mathf.Lerp(Mathf.Min(terrain, 0.0f), cave, Mathf.Clamp01(MyMath.Map(terrain, 0, +10)));
+		float density = Mathf.Lerp(Mathf.Min(terrain, 0.0f), cave, Mathf.Clamp01(MyMath.map(terrain, 0, +10)));
 		
 		return -density;
 	}
@@ -37,7 +38,7 @@ public class TerrainGenerator {
 	public float stalactite_test (Vector3 pos) {
 		var pos2d = new Vector2(pos.x, pos.z);
 		
-		float spike = Mathf.Clamp01(MyMath.Map(noise2d[3].GetValue(pos2d / 5), -1,+1, -1,1));
+		float spike = Mathf.Clamp01(MyMath.map(noise2d[3].GetValue(pos2d / 5), -1,+1, -1,1));
 		return spike;
 	}
 
