@@ -149,8 +149,8 @@ namespace OctreeGeneration {
 	public class TerrainVoxelizer {
 		Dictionary<TerrainChunk, JobHandle> jobs = new Dictionary<TerrainChunk, JobHandle>();
 
-		public int MaxJobs = 2;
 
+		
 		//public void StartJob (TerrainChunk chunk, int ChunkVoxels, TerrainGenerator gen) {
 		//	int ArraySize = ChunkVoxels + 1;
 		//	int voxelsLength = ArraySize * ArraySize * ArraySize;

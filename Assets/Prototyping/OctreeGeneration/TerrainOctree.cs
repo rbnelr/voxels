@@ -43,15 +43,39 @@ namespace OctreeGeneration {
 			//  or its 8 children Nodes as Node[8] array
 			// all 8 children must exist -> this way we do not have overlapping TerrainChunks
 			public object Content = null;
-
-			public float3 _pos;
-			public float _size;
+			
+			public Coord coord;
 
 			public Node[] Children => Content as Node[];
 			public TerrainChunk TerrainChunk => Content as TerrainChunk;
 			
 			public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
 		}
+
+		public struct Coord { // Unique coordinate for each octree node position in the world
+			// 0 is cube of size VoxelSize * ChunkVoxels
+			// 1 is 2x the size aso.
+			public int	lod;
+			// index of the cubes of this lod level
+			// (0,0,0) is the one with low corner on the orign (the one that spans (0,0,0) to (size,size,size) where size = VoxelSize * ChunkVoxels * 2 ^ lod)
+			// indecies are scaled by 2 to allow the root node to shift by half of it's size and still have a valid Coord
+			public int3	index;
+
+			public static Coord FromWorldPos (float3 posWorld, int lod, float VoxelSize, int ChunkVoxels) {
+				return new Coord {
+					lod = lod,
+					index = (int3)floor(posWorld / ((ChunkVoxels << lod) * VoxelSize * 0.5f))
+				};
+			}
+			public float3 ToWorldCube (float VoxelSize, int ChunkVoxels, out float size) { // center, size from Coord
+				size = (ChunkVoxels << lod) * VoxelSize;
+				return ((float3)(index + 1) / 2) * size;
+			}
+
+			public override string ToString () {
+				return string.Format("({0}, ({1}, {2}, {3}))", lod, index.x, index.y, index.z);
+			}
+		};
 
 		public float VoxelSize = 1;
 		public int ChunkVoxels = 32;
@@ -102,23 +126,29 @@ namespace OctreeGeneration {
 			}
 		}
 
-		void updateTree (Node node, float3 pos, float size, int depth=0) {
-			int desiredLod = calcLod(pos, size);
-			int lod = MaxLod - depth;
-			
-			node._pos = pos;
-			node._size = size;
+		void updateTree (Node node, Coord coord) {
+			float size;
+			float3 pos = coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
 
-			bool wantChildren = desiredLod < lod;
+			int desiredLod = calcLod(pos, size);
+			
+			Debug.Assert(coord.lod == node.coord.lod && all(coord.index == node.coord.index));
+			
+			bool wantChildren = desiredLod < coord.lod;
 			
 			if (wantChildren) {
 				node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
 				
 				if (node.Children == null) { // Create Children if we dont already have them
 					var children = new Node[8];
-					for (int i=0; i<8; ++i)
-						children[i] = new Node();
-
+					for (int i=0; i<8; ++i) {
+						children[i] = new Node {
+							coord = new Coord {
+								lod = coord.lod - 1,
+								index = coord.index * 2 + Node.ChildOrder[i] * 2
+							}
+						};
+					}
 					node.Content = children;
 				}
 			} else {
@@ -135,31 +165,34 @@ namespace OctreeGeneration {
 			if (node.Children != null) {
 				var children = node.Children;
 				for (int i=0; i<8; ++i) {
-					var child = Node.ChildOrder[i];
-
-					var childSize = size / 2;
-					var childPos = pos + lerp(-childSize/2, +childSize/2, child);
-
-					updateTree(children[i], childPos, childSize, depth + 1);
+					var childCoord = new Coord {
+						lod = coord.lod - 1,
+						index = coord.index * 2 + Node.ChildOrder[i] * 2
+					};
+					
+					updateTree(children[i], childCoord);
 				}
 			}
 		}
 		
 		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
-			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels)
+			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels) {
+				if (root != null)
+					destroy(root);
 				root = null; // rebuild tree
+			}
 			
 			prevMaxLod = MaxLod;
 			prevVoxelSize = VoxelSize;
 			prevChunkVoxels = ChunkVoxels;
 			
-			float Lod0ChunkSize = VoxelSize * ChunkVoxels;
-			float RootChunkSize = Lod0ChunkSize * Mathf.Pow(2f, MaxLod);
-			
-			if (root == null)
-				root = new Node();
+			if (root == null) {
+				root = new Node {
+					coord = new Coord { lod = MaxLod, index = -1 }
+				};
+			}
 
-			updateTree(root, 0, RootChunkSize);
+			updateTree(root, root.coord);
 		}
 
 		
@@ -168,11 +201,14 @@ namespace OctreeGeneration {
 		};
 		int _countChunks = 0;
 		int _countNodes = 0;
-		void drawChunk (Node n, int depth=0) {
+		void drawChunk (Node n) {
 			_countNodes++;
+			
+			float size;
+			float3 pos = n.coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
 
-			Gizmos.color = drawColors[clamp((MaxLod - depth) % drawColors.Length, 0, drawColors.Length-1)];
-			Gizmos.DrawWireCube(n._pos, (float3)n._size);
+			Gizmos.color = drawColors[clamp(n.coord.lod % drawColors.Length, 0, drawColors.Length-1)];
+			Gizmos.DrawWireCube(pos, (float3)size);
 
 			if (n.TerrainChunk != null) {
 				_countChunks++;
@@ -180,7 +216,7 @@ namespace OctreeGeneration {
 			
 			if (n.Children != null) {
 				for (int i=0; i<8; ++i) {
-					drawChunk(n.Children[i], depth+1);
+					drawChunk(n.Children[i]);
 				}
 			}
 		}
