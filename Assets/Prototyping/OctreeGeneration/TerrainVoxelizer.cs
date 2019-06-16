@@ -5,6 +5,7 @@ using Unity.Collections;
 using UnityEngine;
 using System.Collections.Generic;
 using Unity.Burst;
+using UnityEngine.Profiling;
 
 namespace OctreeGeneration {
 	public struct Voxel {
@@ -22,14 +23,23 @@ namespace OctreeGeneration {
 	
 	public class Voxels {
 		public NativeArray<Voxel> native;
-
-		public Voxel GetVoxel (int3 pos, int ChunkVoxels) {
+		
+		public static int _3dToFlatIndex (int3 pos, int ChunkVoxels) {
 			int ArraySize = ChunkVoxels + 1;
-			return native[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
+			
+			return pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x;
 		}
-		public static Voxel GetVoxel (ref NativeArray<Voxel> native, int3 pos, int ChunkVoxels) {
+		public static int3 flatTo3dIndex (int index, int ChunkVoxels) {
 			int ArraySize = ChunkVoxels + 1;
-			return native[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
+			
+			int3 voxelCoord;
+			voxelCoord.x = index % ArraySize;
+			index /= ArraySize;
+			voxelCoord.y = index % ArraySize;
+			index /= ArraySize;
+			voxelCoord.z = index;
+
+			return voxelCoord;
 		}
 	}
 
@@ -145,24 +155,17 @@ namespace OctreeGeneration {
 			[ReadOnly] public int ChunkVoxels;
 			[ReadOnly] public TerrainGenerator Gen;
 		
-			[WriteOnly] public NativeArray<Voxel> Voxels;
+			[WriteOnly] public NativeArray<Voxel> voxels;
 
 			public void Execute (int i) {
-				int ArraySize = ChunkVoxels + 1;
-
 				int voxelIndex = i;
-				int3 voxelCoord;
-				voxelCoord.x = i % ArraySize;
-				i /= ArraySize;
-				voxelCoord.y = i % ArraySize;
-				i /= ArraySize;
-				voxelCoord.z = i;
+				int3 voxelCoord = Voxels.flatTo3dIndex(i, ChunkVoxels);
 
 				float3 pos_world = (float3)voxelCoord;
 				pos_world *= ChunkSize / ChunkVoxels;
 				pos_world += ChunkPos - ChunkSize * 0.5f;
 						
-				Voxels[voxelIndex] = Gen.Generate(pos_world);
+				voxels[voxelIndex] = Gen.Generate(pos_world);
 			}
 		}
 
@@ -199,8 +202,10 @@ namespace OctreeGeneration {
 					_collectChunks(node.Children[i], ref list);
 		}
 		List<TerrainNode> collectChunks (TerrainNode node) {
+			Profiler.BeginSample("collectChunks");
 			var list = new List<TerrainNode>();
 			_collectChunks(node, ref list);
+			Profiler.EndSample();
 			return list;
 		}
 
@@ -214,18 +219,23 @@ namespace OctreeGeneration {
 
 			{
 				var chunks = collectChunks(octree.root);
-
+				
+				Profiler.BeginSample("chunks.Sort()");
 				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
-
+				Profiler.EndSample();
+				
+				Profiler.BeginSample("StartJob loop");
 				foreach (var chunk in chunks) {
 					if (!cache.ContainsKey(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
 						StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
 					}
 				}
+				Profiler.EndSample();
 			}
 
+			Profiler.BeginSample("Complete Jobs");
 			var toRemove = new List<OctreeCoord>();
-
+			
 			foreach (var job in runningJobs) {
 				if (job.Value.JobHandle.IsCompleted) {
 					job.Value.JobHandle.Complete();
@@ -240,9 +250,11 @@ namespace OctreeGeneration {
 			foreach (var j in toRemove) {
 				runningJobs.Remove(j);
 			}
+			Profiler.EndSample();
 		}
 
 		void OnDestroy () {
+			Profiler.BeginSample("OnDestroy");
 			mesher.Dispose(); // stop running mesher jobs first, then dispose the voxels they might be using
 
 			foreach (var voxels in cache) {
@@ -253,9 +265,12 @@ namespace OctreeGeneration {
 				job.Value.JobHandle.Complete(); // block main thread
 				job.Value.voxels.native.Dispose();
 			}
+			Profiler.EndSample();
 		}
 
 		void StartJob (TerrainNode chunk, int ChunkVoxels, TerrainGenerator gen) {
+			Profiler.BeginSample("StartJob");
+
 			int ArraySize = ChunkVoxels + 1;
 			int voxelsLength = ArraySize * ArraySize * ArraySize;
 			
@@ -267,11 +282,13 @@ namespace OctreeGeneration {
 				ChunkSize = chunk.TerrainChunk.size,
 				ChunkVoxels = ChunkVoxels,
 				Gen = gen,
-				Voxels = runningJob.voxels.native
+				voxels = runningJob.voxels.native
 			};
 			runningJob.JobHandle = job.Schedule(voxelsLength, ChunkVoxels);
 
 			runningJobs.Add(chunk.coord, runningJob);
+
+			Profiler.EndSample();
 		}
 	}
 }

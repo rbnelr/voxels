@@ -20,6 +20,7 @@ namespace OctreeGeneration {
 			go = Object.Instantiate(TerrainChunkPrefab, pos, Quaternion.identity, parent);
 			mesh = new Mesh();
 			mesh.name = "TerrainChunk Mesh";
+			mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 			go.GetComponent<MeshFilter>().mesh = mesh;
 		}
 

@@ -5,6 +5,7 @@ using Unity.Collections;
 using UnityEngine;
 using Unity.Burst;
 using System.Collections.Generic;
+using UnityEngine.Profiling;
 
 namespace OctreeGeneration {
 	
@@ -29,7 +30,7 @@ namespace OctreeGeneration {
 				return false;
 			}
 
-			public unsafe void Execute () {
+			public void Execute () {
 				int index_counter = 0;
 				
 				var cell = new MarchingCubes.Gridcell {
@@ -53,7 +54,7 @@ namespace OctreeGeneration {
 
 								var pos_world = pos_local + ChunkPos;
 							
-								var voxel = Voxels.GetVoxel(ref voxels, voxel_index, ChunkVoxels);
+								var voxel = voxels[Voxels._3dToFlatIndex(voxel_index, ChunkVoxels)];
 
 								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white };
 								cell.val[i] = voxel.density;
@@ -116,8 +117,10 @@ namespace OctreeGeneration {
 					_collectChunks(node.Children[i], ref list);
 		}
 		List<TerrainNode> collectChunks (TerrainNode node) {
+			Profiler.BeginSample("collectChunks");
 			var list = new List<TerrainNode>();
 			_collectChunks(node, ref list);
+			Profiler.EndSample();
 			return list;
 		}
 		
@@ -132,16 +135,21 @@ namespace OctreeGeneration {
 			{
 				var chunks = collectChunks(octree.root);
 		
+				Profiler.BeginSample("chunks.Sort()");
 				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
+				Profiler.EndSample();
 		
+				Profiler.BeginSample("StartJob loop");
 				foreach (var chunk in chunks) {
 					var voxels = voxelizer.GetCachedVoxels(chunk.coord);
 					if (chunk.TerrainChunk.needsRemesh && voxels != null && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
 						StartJob(chunk, octree.ChunkVoxels, voxels);
 					}
 				}
+				Profiler.EndSample();
 			}
 		
+			Profiler.BeginSample("FinishJob loop");
 			var toRemove = new List<OctreeCoord>();
 		
 			foreach (var job in runningJobs) {
@@ -157,6 +165,7 @@ namespace OctreeGeneration {
 			foreach (var j in toRemove) {
 				runningJobs.Remove(j);
 			}
+			Profiler.EndSample();
 		}
 		
 		void StartJob (TerrainNode node, int ChunkVoxels, Voxels voxels) {
@@ -181,28 +190,35 @@ namespace OctreeGeneration {
 		}
 		
 		void FinishJob (RunningJob job) {
+			Profiler.BeginSample("FinishJob");
 			job.JobHandle.Complete();
 			
 			if (job.chunk.mesh == null) {
 				// chunk was deleted, ignore result
 			} else {
 				job.chunk.mesh.Clear();
+				Profiler.BeginSample("NativeArray.ToArray() for mesh attributes");
 				job.chunk.mesh.vertices		= job.job.vertices.ToArray();
 				job.chunk.mesh.colors		= job.job.colors.ToArray();
 				job.chunk.mesh.uv			= job.job.uv.ToArray();
 				job.chunk.mesh.triangles	= job.job.triangles.ToArray();
+				Profiler.EndSample();
 				job.chunk.mesh.RecalculateNormals();
 			
+				Profiler.BeginSample("NativeArray.Dispose");
 				job.job.vertices	.Dispose();
 				job.job.colors		.Dispose();
 				job.job.uv			.Dispose();
 				job.job.triangles	.Dispose();
+				Profiler.EndSample();
 
 				job.chunk.needsRemesh = false;
 			}
+			Profiler.EndSample();
 		}
 		
 		public void Dispose () {
+			Profiler.BeginSample("Dispose");
 			var toRemove = new List<OctreeCoord>();
 
 			foreach (var job in runningJobs) {
@@ -219,6 +235,7 @@ namespace OctreeGeneration {
 			foreach (var j in toRemove) {
 				runningJobs.Remove(j);
 			}
+			Profiler.EndSample();
 		}
 
 		void OnDestroy () {
