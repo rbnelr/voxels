@@ -3,150 +3,226 @@ using Unity.Mathematics;
 using static Unity.Mathematics.math;
 using Unity.Collections;
 using UnityEngine;
+using Unity.Burst;
+using System.Collections.Generic;
 
 namespace OctreeGeneration {
-	public struct TerrainMeshJob : IJob {
-		[ReadOnly] public float3 ChunkPos;
-		[ReadOnly] public float ChunkSize;
-		[ReadOnly] public int ChunkVoxels;
-		[ReadOnly] public NativeArray<Voxel> Voxels;
+	
+	[RequireComponent(typeof(TerrainOctree), typeof(TerrainVoxelizer))]
+	public class TerrainMesher : MonoBehaviour {
+		[BurstCompile]
+		public struct Job : IJob {
+			[ReadOnly] public float3 ChunkPos;
+			[ReadOnly] public float ChunkSize;
+			[ReadOnly] public int ChunkVoxels;
+			[ReadOnly] public NativeArray<Voxel> voxels;
 
-		[WriteOnly] public NativeList<Vector3>	vertices;
-		[WriteOnly] public NativeList<Color>	colors;
-		[WriteOnly] public NativeList<Vector2>	uv;
-		[WriteOnly] public NativeList<int>		triangles;
+			[WriteOnly] public NativeList<Vector3>	vertices;
+			[WriteOnly] public NativeList<Color>	colors;
+			[WriteOnly] public NativeList<Vector2>	uv;
+			[WriteOnly] public NativeList<int>		triangles;
 
-		bool voxelInChild (TerrainChunk node, int ChunkVoxels, int x, int y, int z) { // x,y,z: voxel index
-			//return node.getChild(	x / (ChunkVoxels / 2),
-			//						y / (ChunkVoxels / 2),
-			//						z / (ChunkVoxels / 2)) != null;
-			return false;
-		}
+			bool voxelInChild (TerrainChunk node, int ChunkVoxels, int x, int y, int z) { // x,y,z: voxel index
+				//return node.getChild(	x / (ChunkVoxels / 2),
+				//						y / (ChunkVoxels / 2),
+				//						z / (ChunkVoxels / 2)) != null;
+				return false;
+			}
 
-		public void Execute () {
-			int index_counter = 0;
+			public unsafe void Execute () {
+				int index_counter = 0;
+				
+				var cell = new MarchingCubes.Gridcell {
+					vert = new NativeArray<MarchingCubes.Vertex>(8, Allocator.Temp, NativeArrayOptions.UninitializedMemory),
+					val = new NativeArray<float>(8, Allocator.Temp, NativeArrayOptions.UninitializedMemory),
+				};
+				var verts = new NativeArray<MarchingCubes.Vertex>(5*3, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-			var cell = new MarchingCubes.Gridcell { vert = new MarchingCubes.Vertex[8], val = new float[8] };
-			var tris = new MarchingCubes.Triangle[5] {
-				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
-				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
-				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
-				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
-				new MarchingCubes.Triangle { vert = new MarchingCubes.Vertex[3] },
-			};
-
-			for (int z=0; z<ChunkVoxels; ++z) {
-				for (int y=0; y<ChunkVoxels; ++y) {
-					for (int x=0; x<ChunkVoxels; ++x) {
-						//if (voxelInChild(node, ChunkVoxels, x,y,z))
-						//	continue;
+				for (int z=0; z<ChunkVoxels; ++z) {
+					for (int y=0; y<ChunkVoxels; ++y) {
+						for (int x=0; x<ChunkVoxels; ++x) {
+							//if (voxelInChild(node, ChunkVoxels, x,y,z))
+							//	continue;
 						
-						for (int i=0; i<8; ++i) {
-							var voxel_index = new int3(x,y,z) + MarchingCubes.corners[i];
+							for (int i=0; i<8; ++i) {
+								var voxel_index = new int3(x,y,z) + MarchingCubes.corners[i];
 							
-							var pos_local = (float3)voxel_index;
-							pos_local *= ChunkSize / ChunkVoxels;
-							pos_local -= ChunkSize * 0.5f;
+								var pos_local = (float3)voxel_index;
+								pos_local *= ChunkSize / ChunkVoxels;
+								pos_local -= ChunkSize * 0.5f;
 
-							var pos_world = pos_local + ChunkPos;
+								var pos_world = pos_local + ChunkPos;
 							
-							var voxel = TerrainChunk.GetVoxel(ref Voxels, voxel_index, ChunkVoxels);
+								var voxel = Voxels.GetVoxel(ref voxels, voxel_index, ChunkVoxels);
 
-							cell.vert[i].pos = pos_local;
-							cell.vert[i].color = Color.white;
-							cell.val[i] = voxel.density;
-						}
+								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white };
+								cell.val[i] = voxel.density;
+							}
 						
-						int ntriangles = MarchingCubes.Polygonise(cell, 0.0f, ref tris);
+							int ntriangles = MarchingCubes.Polygonise(cell, 0.0f, verts);
 						
-						for (int i=0; i<ntriangles; ++i) {
-							var a = tris[i].vert[0];
-							var b = tris[i].vert[1];
-							var c = tris[i].vert[2];
+							for (int i=0; i<ntriangles; ++i) {
+								var a = verts[i*3 +0];
+								var b = verts[i*3 +1];
+								var c = verts[i*3 +2];
 
-							vertices.Add(a.pos);
-							vertices.Add(b.pos);
-							vertices.Add(c.pos);
+								vertices.Add(a.pos);
+								vertices.Add(b.pos);
+								vertices.Add(c.pos);
 							
-							colors.Add(a.color);
-							colors.Add(b.color);
-							colors.Add(c.color);
+								colors.Add(a.color);
+								colors.Add(b.color);
+								colors.Add(c.color);
 
-							uv.Add(new Vector2(a.pos.x, a.pos.y));
-							uv.Add(new Vector2(b.pos.x, b.pos.y));
-							uv.Add(new Vector2(c.pos.x, c.pos.y));
+								uv.Add(new Vector2(a.pos.x, a.pos.y));
+								uv.Add(new Vector2(b.pos.x, b.pos.y));
+								uv.Add(new Vector2(c.pos.x, c.pos.y));
 
-							triangles.Add(index_counter++);
-							triangles.Add(index_counter++);
-							triangles.Add(index_counter++);
+								triangles.Add(index_counter++);
+								triangles.Add(index_counter++);
+								triangles.Add(index_counter++);
+							}
 						}
 					}
 				}
+
 			}
-
 		}
-	}
+		
+		class RunningJob {
+			public TerrainChunk chunk;
+			public Job job;
+			public JobHandle JobHandle;
+		}
+		
+		TerrainOctree octree;
+		TerrainVoxelizer voxelizer;
+		
+		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
+		
+		public TerrainGenerator terrainGenerator;
+		public int MaxJobs = 10;
+		
+		void Awake () {
+			octree = GetComponent<TerrainOctree>();
+			voxelizer = GetComponent<TerrainVoxelizer>();
+		}
+		
+		void _collectChunks (TerrainNode node, ref List<TerrainNode> list) {
+			if (node.TerrainChunk != null)
+				list.Add(node);
+			else
+				for (int i=0; i<8; ++i)
+					_collectChunks(node.Children[i], ref list);
+		}
+		List<TerrainNode> collectChunks (TerrainNode node) {
+			var list = new List<TerrainNode>();
+			_collectChunks(node, ref list);
+			return list;
+		}
+		
+		float calcDistToPlayer (TerrainNode node) {
+			return octree.CalcDistToPlayer(node.TerrainChunk.pos, node.TerrainChunk.size);
+		}
+		
+		void Update () {
+			if (octree.root == null)
+				return;
 
-	public struct TerrainMesher {
-		//public JobHandle? jobHandle;
-		//
-		//NativeList<Vector3>?	vertices;
-		//NativeList<Color>?		colors;
-		//NativeList<Vector2>?	uv;
-		//NativeList<int>?		triangles;
-		//
-		//public void StartJob (TerrainChunk chunk, int ChunkVoxels) {
-		//	vertices	= new NativeList<Vector3>(	Allocator.Persistent );
-		//	colors		= new NativeList<Color>(	Allocator.Persistent );
-		//	uv			= new NativeList<Vector2>(	Allocator.Persistent );
-		//	triangles	= new NativeList<int>(		Allocator.Persistent );
-		//
-		//	var job = new TerrainMeshJob {
-		//		ChunkPos = chunk.pos,
-		//		ChunkSize = chunk.size,
-		//		ChunkVoxels = ChunkVoxels,
-		//		Voxels = chunk.voxels.Value,
-		//		
-		//		vertices	= vertices.Value,
-		//		colors		= colors.Value,
-		//		uv			= uv.Value,
-		//		triangles	= triangles.Value,
-		//	};
-		//	jobHandle = job.Schedule();
-		//}
-		//
-		//public void Update (TerrainChunk chunk) {
-		//	if (jobHandle != null && jobHandle.Value.IsCompleted) {
-		//		jobHandle.Value.Complete();
-		//		jobHandle = null;
-		//
-		//		chunk.needsRemesh = false;
-		//		
-		//		chunk.mesh.Clear();
-		//		chunk.mesh.vertices		= vertices.Value.ToArray();
-		//		chunk.mesh.colors		= colors.Value.ToArray();
-		//		chunk.mesh.uv			= uv.Value.ToArray();
-		//		chunk.mesh.triangles	= triangles.Value.ToArray();
-		//		chunk.mesh.RecalculateNormals();
-		//
-		//		vertices	.Value.Dispose();
-		//		colors		.Value.Dispose();
-		//		uv			.Value.Dispose();
-		//		triangles	.Value.Dispose();
-		//	}
-		//}
-		//
-		//public void Dispose () {
-		//	if (jobHandle != null) {
-		//		Debug.Log("TerrainMesher.Dispose(): Job still running, need to wait for it to complete inorder to Dispose of the native arrays");
-		//		jobHandle.Value.Complete();
-		//		jobHandle = null;
-		//	}
-		//
-		//	vertices?.Dispose();
-		//	colors?.Dispose();
-		//	uv?.Dispose();
-		//	triangles?.Dispose();
-		//}
+			{
+				var chunks = collectChunks(octree.root);
+		
+				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
+		
+				foreach (var chunk in chunks) {
+					var voxels = voxelizer.GetCachedVoxels(chunk.coord);
+					if (chunk.TerrainChunk.needsRemesh && voxels != null && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
+						StartJob(chunk, octree.ChunkVoxels, voxels);
+					}
+				}
+			}
+		
+			var toRemove = new List<OctreeCoord>();
+		
+			foreach (var job in runningJobs) {
+				if (job.Value.JobHandle.IsCompleted) {
+					job.Value.JobHandle.Complete();
+		
+					FinishJob(job.Value);
+					
+					toRemove.Add(job.Key);
+				}
+			}
+			
+			foreach (var j in toRemove) {
+				runningJobs.Remove(j);
+			}
+		}
+		
+		void StartJob (TerrainNode node, int ChunkVoxels, Voxels voxels) {
+			var runningJob = new RunningJob();
+
+			runningJob.chunk = node.TerrainChunk;
+
+			runningJob.job = new Job {
+				ChunkPos = node.TerrainChunk.pos,
+				ChunkSize = node.TerrainChunk.size,
+				ChunkVoxels = ChunkVoxels,
+				voxels = voxels.native,
+				
+				vertices	= new NativeList<Vector3>(	Allocator.Persistent ),
+				colors		= new NativeList<Color>(	Allocator.Persistent ),
+				uv			= new NativeList<Vector2>(	Allocator.Persistent ),
+				triangles	= new NativeList<int>(		Allocator.Persistent ),
+			};
+			runningJob.JobHandle = runningJob.job.Schedule();
+		
+			runningJobs.Add(node.coord, runningJob);
+		}
+		
+		void FinishJob (RunningJob job) {
+			job.JobHandle.Complete();
+			
+			if (job.chunk.mesh == null) {
+				// chunk was deleted, ignore result
+			} else {
+				job.chunk.mesh.Clear();
+				job.chunk.mesh.vertices		= job.job.vertices.ToArray();
+				job.chunk.mesh.colors		= job.job.colors.ToArray();
+				job.chunk.mesh.uv			= job.job.uv.ToArray();
+				job.chunk.mesh.triangles	= job.job.triangles.ToArray();
+				job.chunk.mesh.RecalculateNormals();
+			
+				job.job.vertices	.Dispose();
+				job.job.colors		.Dispose();
+				job.job.uv			.Dispose();
+				job.job.triangles	.Dispose();
+
+				job.chunk.needsRemesh = false;
+			}
+		}
+		
+		public void Dispose () {
+			var toRemove = new List<OctreeCoord>();
+
+			foreach (var job in runningJobs) {
+				job.Value.JobHandle.Complete(); // block main thread
+				
+				job.Value.job.vertices.Dispose();
+				job.Value.job.colors.Dispose();
+				job.Value.job.uv.Dispose();
+				job.Value.job.triangles.Dispose();
+				
+				toRemove.Add(job.Key);
+			}
+			
+			foreach (var j in toRemove) {
+				runningJobs.Remove(j);
+			}
+		}
+
+		void OnDestroy () {
+			Dispose();
+		}
 	}
 }

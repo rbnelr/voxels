@@ -4,6 +4,7 @@ using static Unity.Mathematics.math;
 using Unity.Collections;
 using UnityEngine;
 using System.Collections.Generic;
+using Unity.Burst;
 
 namespace OctreeGeneration {
 	public struct Voxel {
@@ -19,6 +20,19 @@ namespace OctreeGeneration {
 		}
 	}
 	
+	public class Voxels {
+		public NativeArray<Voxel> native;
+
+		public Voxel GetVoxel (int3 pos, int ChunkVoxels) {
+			int ArraySize = ChunkVoxels + 1;
+			return native[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
+		}
+		public static Voxel GetVoxel (ref NativeArray<Voxel> native, int3 pos, int ChunkVoxels) {
+			int ArraySize = ChunkVoxels + 1;
+			return native[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
+		}
+	}
+
 	public struct TerrainGenerator {
 		
 		float fractal (float pos, int octaves, float freq, bool dampen=true) {
@@ -101,7 +115,10 @@ namespace OctreeGeneration {
 			return fractal(pos, 3, 400, false);
 		}
 		public Voxel Generate (float3 pos) {
-			
+			//return new Voxel {
+			//	density = dot(pos, normalize(float3(1,2,3))),
+			//};
+
 			var surf = Surface(pos);
 			
 			var abyss = Abyss(pos);
@@ -118,73 +135,143 @@ namespace OctreeGeneration {
 			};
 		}
 	}
-
-	public struct TerrainVoxelizeJob : IJobParallelFor {
-		[ReadOnly] public float3 ChunkPos;
-		[ReadOnly] public float ChunkSize;
-		[ReadOnly] public int ChunkVoxels;
-		[ReadOnly] public TerrainGenerator Gen;
-		
-		[WriteOnly] public NativeArray<Voxel> Voxels;
-
-		public void Execute (int i) {
-			int ArraySize = ChunkVoxels + 1;
-
-			int voxelIndex = i;
-			int3 voxelCoord;
-			voxelCoord.x = i % ArraySize;
-			i /= ArraySize;
-			voxelCoord.y = i % ArraySize;
-			i /= ArraySize;
-			voxelCoord.z = i;
-
-			float3 pos_world = (float3)voxelCoord;
-			pos_world *= ChunkSize / ChunkVoxels;
-			pos_world += ChunkPos - ChunkSize * 0.5f;
-						
-			Voxels[voxelIndex] = Gen.Generate(pos_world);
-		}
-	}
 	
-	public class TerrainVoxelizer {
-		Dictionary<TerrainChunk, JobHandle> jobs = new Dictionary<TerrainChunk, JobHandle>();
-
-
+	public class TerrainVoxelizer : MonoBehaviour {
 		
-		//public void StartJob (TerrainChunk chunk, int ChunkVoxels, TerrainGenerator gen) {
-		//	int ArraySize = ChunkVoxels + 1;
-		//	int voxelsLength = ArraySize * ArraySize * ArraySize;
-		//
-		//	chunk.voxels?.Dispose();
-		//	chunk.voxels = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent);
-		//
-		//	var job = new TerrainVoxelizeJob {
-		//		ChunkPos = chunk.pos,
-		//		ChunkSize = chunk.size,
-		//		ChunkVoxels = ChunkVoxels,
-		//		Gen = gen,
-		//		Voxels = chunk.voxels.Value
-		//	};
-		//	jobHandle = job.Schedule(voxelsLength, ChunkVoxels);
-		//}
-		//public void Update (TerrainChunk chunk) {
-		//	if (jobHandle != null && jobHandle.Value.IsCompleted) {
-		//		jobHandle.Value.Complete();
-		//		jobHandle = null;
-		//
-		//		chunk.needsRemesh = true;
-		//	
-		//		if (chunk.parent != null)
-		//			chunk.parent.needsRemesh = true;
-		//	}
-		//}
-		//
-		//public void Dispose () {
-		//	if (jobHandle != null) {
-		//		Debug.Log("TerrainVoxelizer.Dispose(): Job still running, need to wait for it to complete inorder to Dispose of the native arrays");
-		//		jobHandle.Value.Complete();
-		//		jobHandle = null;
-		//	}
-		//}
+		[BurstCompile]
+		struct Job : IJobParallelFor {
+			[ReadOnly] public float3 ChunkPos;
+			[ReadOnly] public float ChunkSize;
+			[ReadOnly] public int ChunkVoxels;
+			[ReadOnly] public TerrainGenerator Gen;
+		
+			[WriteOnly] public NativeArray<Voxel> Voxels;
+
+			public void Execute (int i) {
+				int ArraySize = ChunkVoxels + 1;
+
+				int voxelIndex = i;
+				int3 voxelCoord;
+				voxelCoord.x = i % ArraySize;
+				i /= ArraySize;
+				voxelCoord.y = i % ArraySize;
+				i /= ArraySize;
+				voxelCoord.z = i;
+
+				float3 pos_world = (float3)voxelCoord;
+				pos_world *= ChunkSize / ChunkVoxels;
+				pos_world += ChunkPos - ChunkSize * 0.5f;
+						
+				Voxels[voxelIndex] = Gen.Generate(pos_world);
+			}
+		}
+
+		class RunningJob {
+			public Voxels voxels;
+			public JobHandle JobHandle;
+		}
+		
+		TerrainOctree octree;
+		TerrainMesher mesher;
+
+		Dictionary<OctreeCoord, Voxels> cache = new Dictionary<OctreeCoord, Voxels>();
+
+		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
+		
+		public TerrainGenerator terrainGenerator;
+		public int MaxJobs = 3;
+		public int CacheSize = 512;
+		
+		void Awake () {
+			octree = GetComponent<TerrainOctree>();
+			mesher = GetComponent<TerrainMesher>();
+		}
+
+		public Voxels GetCachedVoxels (OctreeCoord coord) {
+			return cache.TryGetValue(coord, out Voxels v) ? v : null;
+		}
+
+		void _collectChunks (TerrainNode node, ref List<TerrainNode> list) {
+			if (node.TerrainChunk != null)
+				list.Add(node);
+			else
+				for (int i=0; i<8; ++i)
+					_collectChunks(node.Children[i], ref list);
+		}
+		List<TerrainNode> collectChunks (TerrainNode node) {
+			var list = new List<TerrainNode>();
+			_collectChunks(node, ref list);
+			return list;
+		}
+
+		float calcDistToPlayer (TerrainNode node) {
+			return octree.CalcDistToPlayer(node.TerrainChunk.pos, node.TerrainChunk.size);
+		}
+		
+		void Update () {
+			if (octree.root == null)
+				return;
+
+			{
+				var chunks = collectChunks(octree.root);
+
+				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
+
+				foreach (var chunk in chunks) {
+					if (!cache.ContainsKey(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
+						StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
+					}
+				}
+			}
+
+			var toRemove = new List<OctreeCoord>();
+
+			foreach (var job in runningJobs) {
+				if (job.Value.JobHandle.IsCompleted) {
+					job.Value.JobHandle.Complete();
+
+					// TODO: uncache oldest entry
+					cache.Add(job.Key, job.Value.voxels);
+					
+					toRemove.Add(job.Key);
+				}
+			}
+			
+			foreach (var j in toRemove) {
+				runningJobs.Remove(j);
+			}
+		}
+
+		void OnDestroy () {
+			mesher.Dispose(); // stop running mesher jobs first, then dispose the voxels they might be using
+
+			foreach (var voxels in cache) {
+				voxels.Value.native.Dispose();
+			}
+
+			foreach (var job in runningJobs) {
+				job.Value.JobHandle.Complete(); // block main thread
+				job.Value.voxels.native.Dispose();
+			}
+		}
+
+		void StartJob (TerrainNode chunk, int ChunkVoxels, TerrainGenerator gen) {
+			int ArraySize = ChunkVoxels + 1;
+			int voxelsLength = ArraySize * ArraySize * ArraySize;
+			
+			var runningJob = new RunningJob();
+			runningJob.voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+			
+			var job = new Job {
+				ChunkPos = chunk.TerrainChunk.pos,
+				ChunkSize = chunk.TerrainChunk.size,
+				ChunkVoxels = ChunkVoxels,
+				Gen = gen,
+				Voxels = runningJob.voxels.native
+			};
+			runningJob.JobHandle = job.Schedule(voxelsLength, ChunkVoxels);
+
+			runningJobs.Add(chunk.coord, runningJob);
+		}
 	}
 }

@@ -11,72 +11,88 @@ namespace OctreeGeneration {
 		public GameObject go;
 		public Mesh mesh = new Mesh();
 
-		public NativeArray<Voxel>? voxels = null;
-
-		public Voxel GetVoxel (int3 pos, int ChunkVoxels) {
-			int ArraySize = ChunkVoxels + 1;
-			return voxels.Value[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
-		}
-		public static Voxel GetVoxel (ref NativeArray<Voxel> voxels, int3 pos, int ChunkVoxels) {
-			int ArraySize = ChunkVoxels + 1;
-			return voxels[pos.z * ArraySize * ArraySize + pos.y * ArraySize + pos.x];
-		}
+		public bool needsRemesh = true;
 
 		public TerrainChunk (float3 pos, float size, GameObject TerrainChunkPrefab, Transform parent) {
 			this.pos = pos;
 			this.size = size;
 				
 			go = Object.Instantiate(TerrainChunkPrefab, pos, Quaternion.identity, parent);
+			mesh = new Mesh();
+			mesh.name = "TerrainChunk Mesh";
+			go.GetComponent<MeshFilter>().mesh = mesh;
 		}
 
 		public void Destroy () {
 			Object.Destroy(go);
 			Object.Destroy(mesh);
-			voxels?.Dispose();
+			mesh = null;
 		}
 	}
 
-	public class TerrainOctree : MonoBehaviour {
-		public class Node {
-			// A Node contains
-			//  a TerrainChunk as leaf node
-			//  or its 8 children Nodes as Node[8] array
-			// all 8 children must exist -> this way we do not have overlapping TerrainChunks
-			public object Content = null;
+	public class TerrainNode {
+		// A TerrainNode contains
+		//  a TerrainChunk as leaf node
+		//  or its 8 children Nodes as TerrainNode[8] array
+		// all 8 children must exist -> this way we do not have overlapping TerrainChunks
+		public object Content = null;
 			
-			public Coord coord;
+		public OctreeCoord coord;
 
-			public Node[] Children => Content as Node[];
-			public TerrainChunk TerrainChunk => Content as TerrainChunk;
+		public TerrainNode[] Children => Content as TerrainNode[];
+		public TerrainChunk TerrainChunk => Content as TerrainChunk;
 			
-			public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
+		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
+	}
+
+	public struct OctreeCoord { // Unique coordinate for each octree node position in the world
+		// 0 is cube of size VoxelSize * ChunkVoxels
+		// 1 is 2x the size aso.
+		public readonly int		lod;
+		// index of the cubes of this lod level
+		// (0,0,0) is the one with low corner on the orign (the one that spans (0,0,0) to (size,size,size) where size = VoxelSize * ChunkVoxels * 2 ^ lod)
+		// indecies are scaled by 2 to allow the root node to shift by half of it's size and still have a valid OctreeCoord
+		public readonly int3	index;
+
+		public OctreeCoord (int lod, int3 index) {
+			this.lod = lod;
+			this.index = index;
 		}
 
-		public struct Coord { // Unique coordinate for each octree node position in the world
-			// 0 is cube of size VoxelSize * ChunkVoxels
-			// 1 is 2x the size aso.
-			public int	lod;
-			// index of the cubes of this lod level
-			// (0,0,0) is the one with low corner on the orign (the one that spans (0,0,0) to (size,size,size) where size = VoxelSize * ChunkVoxels * 2 ^ lod)
-			// indecies are scaled by 2 to allow the root node to shift by half of it's size and still have a valid Coord
-			public int3	index;
-
-			public static Coord FromWorldPos (float3 posWorld, int lod, float VoxelSize, int ChunkVoxels) {
-				return new Coord {
-					lod = lod,
-					index = (int3)floor(posWorld / ((ChunkVoxels << lod) * VoxelSize * 0.5f))
-				};
-			}
-			public float3 ToWorldCube (float VoxelSize, int ChunkVoxels, out float size) { // center, size from Coord
-				size = (ChunkVoxels << lod) * VoxelSize;
-				return ((float3)(index + 1) / 2) * size;
+		public static OctreeCoord FromWorldPos (float3 posWorld, int lod, float VoxelSize, int ChunkVoxels) {
+			return new OctreeCoord(lod, (int3)floor(posWorld / ((ChunkVoxels << lod) * VoxelSize * 0.5f)));
+		}
+		public float3 ToWorldCube (float VoxelSize, int ChunkVoxels, out float size) { // center, size from OctreeCoord
+			size = (ChunkVoxels << lod) * VoxelSize;
+			return ((float3)(index + 1) / 2) * size;
+		}
+			
+		public override string ToString () {
+			return string.Format("({0}, ({1}, {2}, {3}))", lod, index.x, index.y, index.z);
+		}
+			
+		public override bool Equals (object obj) {
+			if (obj == null || GetType() != obj.GetType()) {
+				return false;
 			}
 
-			public override string ToString () {
-				return string.Format("({0}, ({1}, {2}, {3}))", lod, index.x, index.y, index.z);
-			}
-		};
+			var r = (OctreeCoord)obj;
+			return lod == r.lod && all(index == r.index);
+		}
+			
+		public override int GetHashCode () {
+			// https://stackoverflow.com/questions/1646807/quick-and-simple-hash-code-combinations
+			int hash = 1009;
+			hash = (hash * 9176) + lod;
+			hash = (hash * 9176) + index.x;
+			hash = (hash * 9176) + index.y;
+			hash = (hash * 9176) + index.z;
+			return hash;
+		}
+	};
 
+	public class TerrainOctree : MonoBehaviour {
+		
 		public float VoxelSize = 1;
 		public int ChunkVoxels = 32;
 		[Range(0, 15)]
@@ -98,12 +114,15 @@ namespace OctreeGeneration {
 
 		float3 playerPos { get { return player.transform.position; } }
 		
-		Node root;
+		public TerrainNode root;
 		
-		int calcLod (float3 chunkPos, float chunkSize) {
+		public float CalcDistToPlayer (float3 chunkPos, float chunkSize) {
 			var closest = chunkPos + clamp(playerPos - chunkPos, -chunkSize/2, chunkSize/2);
-			var dist = length(playerPos - closest);
-			
+			return length(playerPos - closest);
+		}
+		int calcLod (float3 chunkPos, float chunkSize) {
+			var dist = CalcDistToPlayer(chunkPos, chunkSize);
+
 			float m = LodFuncStart;
 			float n = LodFuncEnd;
 			float l = LodFuncEndLod;
@@ -116,7 +135,7 @@ namespace OctreeGeneration {
 			return lod;
 		}
 
-		void destroy (Node node) {
+		void destroy (TerrainNode node) {
 			node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
 			
 			if (node.Children != null) { // destroy children if we have them
@@ -126,27 +145,22 @@ namespace OctreeGeneration {
 			}
 		}
 
-		void updateTree (Node node, Coord coord) {
+		void updateTree (TerrainNode node) {
 			float size;
-			float3 pos = coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
+			float3 pos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
 
 			int desiredLod = calcLod(pos, size);
 			
-			Debug.Assert(coord.lod == node.coord.lod && all(coord.index == node.coord.index));
-			
-			bool wantChildren = desiredLod < coord.lod;
+			bool wantChildren = desiredLod < node.coord.lod;
 			
 			if (wantChildren) {
 				node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
 				
 				if (node.Children == null) { // Create Children if we dont already have them
-					var children = new Node[8];
+					var children = new TerrainNode[8];
 					for (int i=0; i<8; ++i) {
-						children[i] = new Node {
-							coord = new Coord {
-								lod = coord.lod - 1,
-								index = coord.index * 2 + Node.ChildOrder[i] * 2
-							}
+						children[i] = new TerrainNode {
+							coord = new OctreeCoord(node.coord.lod - 1, node.coord.index * 2 + TerrainNode.ChildOrder[i] * 2)
 						};
 					}
 					node.Content = children;
@@ -163,15 +177,8 @@ namespace OctreeGeneration {
 			}
 			
 			if (node.Children != null) {
-				var children = node.Children;
-				for (int i=0; i<8; ++i) {
-					var childCoord = new Coord {
-						lod = coord.lod - 1,
-						index = coord.index * 2 + Node.ChildOrder[i] * 2
-					};
-					
-					updateTree(children[i], childCoord);
-				}
+				for (int i=0; i<8; ++i)
+					updateTree(node.Children[i]);
 			}
 		}
 		
@@ -187,12 +194,12 @@ namespace OctreeGeneration {
 			prevChunkVoxels = ChunkVoxels;
 			
 			if (root == null) {
-				root = new Node {
-					coord = new Coord { lod = MaxLod, index = -1 }
+				root = new TerrainNode {
+					coord = new OctreeCoord(MaxLod, -1)
 				};
 			}
 
-			updateTree(root, root.coord);
+			updateTree(root);
 		}
 
 		
@@ -201,7 +208,7 @@ namespace OctreeGeneration {
 		};
 		int _countChunks = 0;
 		int _countNodes = 0;
-		void drawChunk (Node n) {
+		void drawChunk (TerrainNode n) {
 			_countNodes++;
 			
 			float size;
