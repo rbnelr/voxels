@@ -118,25 +118,6 @@ namespace OctreeGeneration {
 			voxelizer = GetComponent<TerrainVoxelizer>();
 		}
 		
-		void _collectChunks (TerrainNode node, ref List<TerrainNode> list) {
-			if (node.TerrainChunk != null)
-				list.Add(node);
-			else
-				for (int i=0; i<8; ++i)
-					_collectChunks(node.Children[i], ref list);
-		}
-		List<TerrainNode> collectChunks (TerrainNode node) {
-			Profiler.BeginSample("collectChunks");
-			var list = new List<TerrainNode>();
-			_collectChunks(node, ref list);
-			Profiler.EndSample();
-			return list;
-		}
-		
-		float calcDistToPlayer (TerrainNode node) {
-			return octree.CalcDistToPlayer(node.TerrainChunk.pos, node.TerrainChunk.size);
-		}
-		
 		void Update () {
 			if (octree.root == null)
 				return;
