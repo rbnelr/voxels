@@ -110,7 +110,6 @@ namespace OctreeGeneration {
 		
 		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
 		
-		public TerrainGenerator terrainGenerator;
 		public int MaxJobs = 10;
 		
 		void Awake () {
