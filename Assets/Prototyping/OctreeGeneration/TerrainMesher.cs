@@ -6,6 +6,7 @@ using UnityEngine;
 using Unity.Burst;
 using System.Collections.Generic;
 using UnityEngine.Profiling;
+using Unity.Entities;
 
 namespace OctreeGeneration {
 	
@@ -18,9 +19,10 @@ namespace OctreeGeneration {
 			[ReadOnly] public int ChunkVoxels;
 			[ReadOnly] public NativeArray<Voxel> voxels;
 
-			[WriteOnly] public NativeList<Vector3>	vertices;
+			[WriteOnly] public NativeList<float3>	vertices;
+			[WriteOnly] public NativeList<float3>	normals;
 			[WriteOnly] public NativeList<Color>	colors;
-			[WriteOnly] public NativeList<Vector2>	uv;
+			[WriteOnly] public NativeList<float2>	uv;
 			[WriteOnly] public NativeList<int>		triangles;
 
 			bool voxelInChild (TerrainChunk node, int ChunkVoxels, int x, int y, int z) { // x,y,z: voxel index
@@ -38,13 +40,15 @@ namespace OctreeGeneration {
 					val = new NativeArray<float>(8, Allocator.Temp, NativeArrayOptions.UninitializedMemory),
 				};
 				var verts = new NativeArray<MarchingCubes.Vertex>(5*3, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+				
+				var vertlist = new NativeArray<MarchingCubes.Vertex>(12, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
 				for (int z=0; z<ChunkVoxels; ++z) {
 					for (int y=0; y<ChunkVoxels; ++y) {
 						for (int x=0; x<ChunkVoxels; ++x) {
 							//if (voxelInChild(node, ChunkVoxels, x,y,z))
 							//	continue;
-						
+							
 							for (int i=0; i<8; ++i) {
 								var voxel_index = new int3(x,y,z) + MarchingCubes.corners[i];
 							
@@ -59,8 +63,8 @@ namespace OctreeGeneration {
 								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white };
 								cell.val[i] = voxel.density;
 							}
-						
-							int ntriangles = MarchingCubes.Polygonise(cell, 0.0f, verts);
+							
+							int ntriangles = MarchingCubes.Polygonise(cell, 0.0f, verts, ref vertlist);
 						
 							for (int i=0; i<ntriangles; ++i) {
 								var a = verts[i*3 +0];
@@ -70,6 +74,12 @@ namespace OctreeGeneration {
 								vertices.Add(a.pos);
 								vertices.Add(b.pos);
 								vertices.Add(c.pos);
+
+								var flatNormal = cross(b.pos - a.pos, c.pos - a.pos);
+
+								normals.Add(flatNormal);
+								normals.Add(flatNormal);
+								normals.Add(flatNormal);
 							
 								colors.Add(a.color);
 								colors.Add(b.color);
@@ -131,23 +141,16 @@ namespace OctreeGeneration {
 		void Update () {
 			if (octree.root == null)
 				return;
-
-			{
-				var chunks = collectChunks(octree.root);
-		
-				Profiler.BeginSample("chunks.Sort()");
-				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
-				Profiler.EndSample();
-		
-				Profiler.BeginSample("StartJob loop");
-				foreach (var chunk in chunks) {
-					var voxels = voxelizer.GetCachedVoxels(chunk.coord);
-					if (chunk.TerrainChunk.needsRemesh && voxels != null && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
-						StartJob(chunk, octree.ChunkVoxels, voxels);
-					}
+			
+			Profiler.BeginSample("StartJob loop");
+			for (int i=0; i<octree.SortedTerrainChunks.Count; ++i) {
+				var chunk = octree.SortedTerrainChunks[i];
+				var voxels = voxelizer.GetCachedVoxels(chunk.coord);
+				if (chunk.TerrainChunk.needsRemesh && voxels != null && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
+					StartJob(chunk, octree.ChunkVoxels, voxels);
 				}
-				Profiler.EndSample();
 			}
+			Profiler.EndSample();
 		
 			Profiler.BeginSample("FinishJob loop");
 			var toRemove = new List<OctreeCoord>();
@@ -169,25 +172,42 @@ namespace OctreeGeneration {
 		}
 		
 		void StartJob (TerrainNode node, int ChunkVoxels, Voxels voxels) {
+			Profiler.BeginSample("StartJob()");
+			
+			Profiler.BeginSample("new RunningJob()");
 			var runningJob = new RunningJob();
+			Profiler.EndSample();
 
 			runningJob.chunk = node.TerrainChunk;
-
+			
+			Profiler.BeginSample("new Job");
 			runningJob.job = new Job {
 				ChunkPos = node.TerrainChunk.pos,
 				ChunkSize = node.TerrainChunk.size,
 				ChunkVoxels = ChunkVoxels,
 				voxels = voxels.native,
 				
-				vertices	= new NativeList<Vector3>(	Allocator.Persistent ),
+				vertices	= new NativeList<float3>(	Allocator.Persistent ),
+				normals		= new NativeList<float3>(	Allocator.Persistent ),
 				colors		= new NativeList<Color>(	Allocator.Persistent ),
-				uv			= new NativeList<Vector2>(	Allocator.Persistent ),
+				uv			= new NativeList<float2>(	Allocator.Persistent ),
 				triangles	= new NativeList<int>(		Allocator.Persistent ),
 			};
+			Profiler.EndSample();
+
+			Profiler.BeginSample("job.Schedule");
 			runningJob.JobHandle = runningJob.job.Schedule();
+			Profiler.EndSample();
 		
 			runningJobs.Add(node.coord, runningJob);
+			Profiler.EndSample();
 		}
+
+		List<Vector3> verticesBuf = new List<Vector3>();
+		List<Vector3> normalsBuf = new List<Vector3>();
+		List<Vector2> uvsBuf = new List<Vector2>();
+		List<Color> colorsBuf = new List<Color>();
+		List<int> trianglesBuf = new List<int>();
 		
 		void FinishJob (RunningJob job) {
 			Profiler.BeginSample("FinishJob");
@@ -196,17 +216,30 @@ namespace OctreeGeneration {
 			if (job.chunk.mesh == null) {
 				// chunk was deleted, ignore result
 			} else {
+				var dyn = new DynamicBuffer<Vector3>();
+
 				job.chunk.mesh.Clear();
 				Profiler.BeginSample("NativeArray.ToArray() for mesh attributes");
-				job.chunk.mesh.vertices		= job.job.vertices.ToArray();
-				job.chunk.mesh.colors		= job.job.colors.ToArray();
-				job.chunk.mesh.uv			= job.job.uv.ToArray();
-				job.chunk.mesh.triangles	= job.job.triangles.ToArray();
+					Profiler.BeginSample("vertices");
+						job.chunk.mesh.SetVerticesNative(job.job.vertices, ref verticesBuf);
+					Profiler.EndSample();
+					Profiler.BeginSample("normals");
+						job.chunk.mesh.SetNormalsNative(job.job.normals, ref normalsBuf);
+					Profiler.EndSample();
+					Profiler.BeginSample("uv");
+						job.chunk.mesh.SetUvsNative(0, job.job.uv, ref uvsBuf);
+					Profiler.EndSample();
+					Profiler.BeginSample("colors");
+						job.chunk.mesh.SetColorsNative(job.job.colors, ref colorsBuf);
+					Profiler.EndSample();
+					Profiler.BeginSample("triangles");
+						job.chunk.mesh.SetTrianglesNative(job.job.triangles, 0, ref trianglesBuf);
+					Profiler.EndSample();
 				Profiler.EndSample();
-				job.chunk.mesh.RecalculateNormals();
 			
 				Profiler.BeginSample("NativeArray.Dispose");
 				job.job.vertices	.Dispose();
+				job.job.normals		.Dispose();
 				job.job.colors		.Dispose();
 				job.job.uv			.Dispose();
 				job.job.triangles	.Dispose();
@@ -225,6 +258,7 @@ namespace OctreeGeneration {
 				job.Value.JobHandle.Complete(); // block main thread
 				
 				job.Value.job.vertices.Dispose();
+				job.Value.job.normals.Dispose();
 				job.Value.job.colors.Dispose();
 				job.Value.job.uv.Dispose();
 				job.Value.job.triangles.Dispose();

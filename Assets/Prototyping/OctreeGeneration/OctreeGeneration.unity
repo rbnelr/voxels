@@ -384,14 +384,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   VoxelSize: 1
   ChunkVoxels: 64
-  MaxLod: 8
-  LodFuncStart: 0.9
-  LodFuncEnd: 16
-  LodFuncEndLod: 7
+  MaxLod: 9
+  LodFuncStart: 0.5
+  LodFuncEnd: 20
+  LodFuncEndLod: 5
   TerrainChunkPrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
     type: 3}
   player: {fileID: 1431956234}
-  AlwaysDrawOctree: 1
+  AlwaysDrawOctree: 0
 --- !u!4 &914998217
 Transform:
   m_ObjectHideFlags: 0
@@ -483,8 +483,8 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
-  field of view: 60
+  far clip plane: 10000
+  field of view: 53.8
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -509,8 +509,8 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 916012521}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalRotation: {x: -0.5966291, y: 0.31917724, z: -0.279689, w: -0.6811269}
+  m_LocalPosition: {x: 76.178154, y: -577.20715, z: -123.066895}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}

@@ -77,6 +77,7 @@
     <Compile Include="Assets\Prototyping\GeneratorTesting\TerrainGenerator.cs" />
     <Compile Include="Assets\Prototyping\GeneratorTesting\TerrainSlice.cs" />
     <Compile Include="Assets\Prototyping\GeneratorTesting\Visualizer.cs" />
+    <Compile Include="Assets\Prototyping\MeshExt.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\MarchingCubes.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainMesher.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainOctree.cs" />

@@ -2,6 +2,8 @@
 using Unity.Mathematics;
 using static Unity.Mathematics.math;
 using Unity.Collections;
+using System.Collections.Generic;
+using UnityEngine.Profiling;
 
 namespace OctreeGeneration {
 	public class TerrainChunk {
@@ -10,6 +12,8 @@ namespace OctreeGeneration {
 
 		public GameObject go;
 		public Mesh mesh = new Mesh();
+
+		public float latestDistToPlayer;
 
 		public bool needsRemesh = true;
 
@@ -46,7 +50,7 @@ namespace OctreeGeneration {
 		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
 	}
 
-	public struct OctreeCoord { // Unique coordinate for each octree node position in the world
+	public struct OctreeCoord : System.IEquatable<OctreeCoord> { // Unique coordinate for each octree node position in the world
 		// 0 is cube of size VoxelSize * ChunkVoxels
 		// 1 is 2x the size aso.
 		public readonly int		lod;
@@ -72,13 +76,17 @@ namespace OctreeGeneration {
 			return string.Format("({0}, ({1}, {2}, {3}))", lod, index.x, index.y, index.z);
 		}
 			
-		public override bool Equals (object obj) {
-			if (obj == null || GetType() != obj.GetType()) {
-				return false;
-			}
+		//public override bool Equals (object obj) {
+		//	if (obj == null || GetType() != obj.GetType()) {
+		//		return false;
+		//	}
+		//
+		//	var r = (OctreeCoord)obj;
+		//	return lod == r.lod && all(index == r.index);
+		//}
 
-			var r = (OctreeCoord)obj;
-			return lod == r.lod && all(index == r.index);
+		bool System.IEquatable<OctreeCoord>.Equals(OctreeCoord other) {
+			return lod == other.lod && all(index == other.index);
 		}
 			
 		public override int GetHashCode () {
@@ -121,9 +129,7 @@ namespace OctreeGeneration {
 			var closest = chunkPos + clamp(playerPos - chunkPos, -chunkSize/2, chunkSize/2);
 			return length(playerPos - closest);
 		}
-		int calcLod (float3 chunkPos, float chunkSize) {
-			var dist = CalcDistToPlayer(chunkPos, chunkSize);
-
+		int calcLod (float dist) {
 			float m = LodFuncStart;
 			float n = LodFuncEnd;
 			float l = LodFuncEndLod;
@@ -150,11 +156,20 @@ namespace OctreeGeneration {
 			float size;
 			float3 pos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
 
-			int desiredLod = calcLod(pos, size);
+			float dist = CalcDistToPlayer(pos, size);
+			int desiredLod = calcLod(dist);
 			
+			if (node.TerrainChunk != null) {
+				node.TerrainChunk.latestDistToPlayer = dist;
+			}
+
 			bool wantChildren = desiredLod < node.coord.lod;
 			
 			if (wantChildren) {
+				Profiler.BeginSample("chachedSortedTerrainChunks.Remove()");
+				chachedSortedTerrainChunks.Remove(node);
+				Profiler.EndSample();
+
 				node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
 				
 				if (node.Children == null) { // Create Children if we dont already have them
@@ -173,8 +188,10 @@ namespace OctreeGeneration {
 						destroy(children[i]);
 				}
 
-				if (node.TerrainChunk == null)
+				if (node.TerrainChunk == null) {
 					node.Content = new TerrainChunk(pos, size, TerrainChunkPrefab, this.gameObject.transform);
+					chachedSortedTerrainChunks.Add(node);
+				}
 			}
 			
 			if (node.Children != null) {
@@ -183,6 +200,18 @@ namespace OctreeGeneration {
 			}
 		}
 		
+		List<TerrainNode> chachedSortedTerrainChunks = new List<TerrainNode>();
+		public List<TerrainNode> SortedTerrainChunks => chachedSortedTerrainChunks;
+		
+		void resortNodeList () {
+			Profiler.BeginSample("resortNodeList()");
+			chachedSortedTerrainChunks.Sort( (l, r) => { // sort so that smallest chunks are before larger ones and closer ones are before further ones
+				int order = l.coord.lod.CompareTo(r.coord.lod);
+				return order != 0 ? order : l.TerrainChunk.latestDistToPlayer.CompareTo(r.TerrainChunk.latestDistToPlayer);
+			});
+			Profiler.EndSample();
+		}
+
 		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
 			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels) {
 				if (root != null)
@@ -201,6 +230,8 @@ namespace OctreeGeneration {
 			}
 
 			updateTree(root);
+
+			resortNodeList();
 		}
 
 		

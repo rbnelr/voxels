@@ -194,46 +194,20 @@ namespace OctreeGeneration {
 			return cache.TryGetValue(coord, out Voxels v) ? v : null;
 		}
 
-		void _collectChunks (TerrainNode node, ref List<TerrainNode> list) {
-			if (node.TerrainChunk != null)
-				list.Add(node);
-			else
-				for (int i=0; i<8; ++i)
-					_collectChunks(node.Children[i], ref list);
-		}
-		List<TerrainNode> collectChunks (TerrainNode node) {
-			Profiler.BeginSample("collectChunks");
-			var list = new List<TerrainNode>();
-			_collectChunks(node, ref list);
-			Profiler.EndSample();
-			return list;
-		}
-
-		float calcDistToPlayer (TerrainNode node) {
-			return octree.CalcDistToPlayer(node.TerrainChunk.pos, node.TerrainChunk.size);
-		}
-		
 		void Update () {
 			if (octree.root == null)
 				return;
 
-			{
-				var chunks = collectChunks(octree.root);
-				
-				Profiler.BeginSample("chunks.Sort()");
-				chunks.Sort( (l, r)=> calcDistToPlayer(l).CompareTo(calcDistToPlayer(r)) );
-				Profiler.EndSample();
-				
-				Profiler.BeginSample("StartJob loop");
-				foreach (var chunk in chunks) {
-					if (!cache.ContainsKey(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
-						StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
-					}
+			Profiler.BeginSample("StartJob loop");
+			for (int i=0; i<octree.SortedTerrainChunks.Count; ++i) {
+				var chunk = octree.SortedTerrainChunks[i];
+				if (!cache.ContainsKey(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
+					StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
 				}
-				Profiler.EndSample();
 			}
+			Profiler.EndSample();
 
-			Profiler.BeginSample("Complete Jobs");
+			Profiler.BeginSample("Finish Jobs");
 			var toRemove = new List<OctreeCoord>();
 			
 			foreach (var job in runningJobs) {
@@ -274,9 +248,12 @@ namespace OctreeGeneration {
 			int ArraySize = ChunkVoxels + 1;
 			int voxelsLength = ArraySize * ArraySize * ArraySize;
 			
+			Profiler.BeginSample("new NativeArray");
 			var runningJob = new RunningJob();
 			runningJob.voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+			Profiler.EndSample();
 			
+			Profiler.BeginSample("new Job");
 			var job = new Job {
 				ChunkPos = chunk.TerrainChunk.pos,
 				ChunkSize = chunk.TerrainChunk.size,
@@ -284,7 +261,11 @@ namespace OctreeGeneration {
 				Gen = gen,
 				voxels = runningJob.voxels.native
 			};
+			Profiler.EndSample();
+			
+			Profiler.BeginSample("job.Schedule");
 			runningJob.JobHandle = job.Schedule(voxelsLength, ChunkVoxels);
+			Profiler.EndSample();
 
 			runningJobs.Add(chunk.coord, runningJob);
 

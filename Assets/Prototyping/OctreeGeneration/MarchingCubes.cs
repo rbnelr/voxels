@@ -366,7 +366,9 @@ namespace OctreeGeneration {
 			3,7,
 		};
 
-		public static int Polygonise (Gridcell grid, float isolevel, NativeArray<Vertex> /*[5*3]*/ vertices) {
+		public static int Polygonise (Gridcell grid, float isolevel, NativeArray<Vertex> /*[5*3]*/ vertices,
+				ref NativeArray<Vertex> vertlist /*12*/ // avoid allocating this for each call
+				) {
 			/*
 			Determine the index into the edge table which
 			tells us which vertices are inside of the surface
@@ -382,7 +384,6 @@ namespace OctreeGeneration {
 				return(0);
 
 			/* Find the vertices where the surface intersects the cube */
-			var vertlist = new NativeArray<Vertex>(12, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 		
 			for (int i=0; i<12; ++i) {
 				if ((edgeTable[cubeindex] & (1 << i)) != 0) {
