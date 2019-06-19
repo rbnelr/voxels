@@ -6,6 +6,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using Unity.Burst;
 using UnityEngine.Profiling;
+using System.Collections.ObjectModel;
 
 namespace OctreeGeneration {
 	public struct Voxel {
@@ -22,8 +23,13 @@ namespace OctreeGeneration {
 	}
 	
 	public class Voxels {
-		public NativeArray<Voxel> native;
-		
+		public readonly OctreeCoord	coord;
+		public NativeArray<Voxel>	native;
+
+		public Voxels (OctreeCoord c) {
+			coord = c;
+		}
+
 		public static int _3dToFlatIndex (int3 pos, int ChunkVoxels) {
 			int ArraySize = ChunkVoxels + 1;
 			
@@ -40,6 +46,13 @@ namespace OctreeGeneration {
 			voxelCoord.z = index;
 
 			return voxelCoord;
+		}
+	}
+
+	class VoxelCache : KeyedCollection<OctreeCoord, Voxels> {
+		
+		protected override OctreeCoord GetKeyForItem (Voxels item) {
+			return item.coord;
 		}
 	}
 
@@ -177,7 +190,7 @@ namespace OctreeGeneration {
 		TerrainOctree octree;
 		TerrainMesher mesher;
 
-		Dictionary<OctreeCoord, Voxels> cache = new Dictionary<OctreeCoord, Voxels>();
+		VoxelCache cache = new VoxelCache();
 
 		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
 		
@@ -191,9 +204,11 @@ namespace OctreeGeneration {
 		}
 
 		public Voxels GetCachedVoxels (OctreeCoord coord) {
-			return cache.TryGetValue(coord, out Voxels v) ? v : null;
+			if (!cache.Contains(coord))
+				return null;
+			return cache[coord];
 		}
-
+		
 		void Update () {
 			if (octree.root == null)
 				return;
@@ -201,7 +216,7 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("StartJob loop");
 			for (int i=0; i<octree.SortedTerrainChunks.Count; ++i) {
 				var chunk = octree.SortedTerrainChunks[i];
-				if (!cache.ContainsKey(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
+				if (!cache.Contains(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
 					StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
 				}
 			}
@@ -214,8 +229,11 @@ namespace OctreeGeneration {
 				if (job.Value.JobHandle.IsCompleted) {
 					job.Value.JobHandle.Complete();
 
-					// TODO: uncache oldest entry
-					cache.Add(job.Key, job.Value.voxels);
+					while (cache.Count > 0 && cache.Count > (CacheSize -1)) { // uncache
+						cache.RemoveAt(0);
+					}
+
+					cache.Add(job.Value.voxels);
 					
 					toRemove.Add(job.Key);
 				}
@@ -232,7 +250,7 @@ namespace OctreeGeneration {
 			mesher.Dispose(); // stop running mesher jobs first, then dispose the voxels they might be using
 
 			foreach (var voxels in cache) {
-				voxels.Value.native.Dispose();
+				voxels.native.Dispose();
 			}
 
 			foreach (var job in runningJobs) {
@@ -250,7 +268,7 @@ namespace OctreeGeneration {
 			
 			Profiler.BeginSample("new NativeArray");
 			var runningJob = new RunningJob();
-			runningJob.voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+			runningJob.voxels = new Voxels(chunk.coord) { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
 			Profiler.EndSample();
 			
 			Profiler.BeginSample("new Job");
@@ -270,6 +288,10 @@ namespace OctreeGeneration {
 			runningJobs.Add(chunk.coord, runningJob);
 
 			Profiler.EndSample();
+		}
+
+		void OnGUI () {
+			GUI.Label(new Rect(0, 90, 500,30), "Voxelizer Cache: "+ cache.Count +" / "+ CacheSize);
 		}
 	}
 }

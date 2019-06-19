@@ -84,6 +84,7 @@
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainVoxelizer.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\Visualizer.cs" />
     <Compile Include="Assets\Prototyping\OctreeTest\TerrainOctreeTest.cs" />
+    <Compile Include="Assets\Prototyping\Player.cs" />
     <Compile Include="Assets\Prototyping\VectorExt.cs" />
     <None Include="Assets\CoherentNoise\readme.txt" />
     <None Include="Assets\Prototyping\Terrain.shader" />
