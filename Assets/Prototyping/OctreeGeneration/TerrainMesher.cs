@@ -6,7 +6,6 @@ using UnityEngine;
 using Unity.Burst;
 using System.Collections.Generic;
 using UnityEngine.Profiling;
-using Unity.Entities;
 
 namespace OctreeGeneration {
 	
@@ -216,8 +215,6 @@ namespace OctreeGeneration {
 			if (job.chunk.mesh == null) {
 				// chunk was deleted, ignore result
 			} else {
-				var dyn = new DynamicBuffer<Vector3>();
-
 				job.chunk.mesh.Clear();
 				Profiler.BeginSample("NativeArray.ToArray() for mesh attributes");
 					Profiler.BeginSample("vertices");
