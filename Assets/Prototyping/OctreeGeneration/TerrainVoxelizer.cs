@@ -103,7 +103,7 @@ namespace OctreeGeneration {
 		public NoiseSample3 Cave (float3 pos) {
 			//return fsnoise(pos, 3, 400, false);
 			
-			var val = noise.snoise(pos / 100) + 0.42f;
+			var val = Unity.Mathematics.noise.snoise(pos / 100) + 0.42f;
 
 			return new NoiseSample3 { val=val, gradient = 0 };
 		}
