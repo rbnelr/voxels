@@ -36,6 +36,8 @@ namespace OctreeGeneration {
 			public NativeArray<float> val; // [8]
 		};
 
+		public const int MaxVartsPerCell = 5 * 3;
+
 		// Linearly interpolate the position where an isosurface cuts an edge between two vertices, each with their own scalar value
 		static Vertex VertexInterp (float isolevel, Vertex v1, Vertex v2, float valp1, float valp2) {
 			if (Mathf.Abs(isolevel - valp1) < 0.00001f)

@@ -4,101 +4,25 @@ using static Unity.Mathematics.math;
 using Unity.Collections;
 using System.Collections.Generic;
 using UnityEngine.Profiling;
+using System.Collections.ObjectModel;
 
 namespace OctreeGeneration {
-	public class TerrainChunk {
-		public float3 pos;
-		public float size;
-
-		public GameObject go;
-		public Mesh mesh = new Mesh();
-
-		public float latestDistToPlayer;
-
-		public bool needsRemesh = true;
-
-		public TerrainChunk (float3 pos, float size, GameObject TerrainChunkPrefab, Transform parent) {
-			this.pos = pos;
-			this.size = size;
-				
-			go = Object.Instantiate(TerrainChunkPrefab, pos, Quaternion.identity, parent);
-			mesh = new Mesh();
-			mesh.name = "TerrainChunk Mesh";
-			mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-			go.GetComponent<MeshFilter>().mesh = mesh;
+	public class TerrainNodeCache : KeyedCollection<OctreeCoord, TerrainNode> {
+		public delegate void NodeDeleter (TerrainNode n);
+		
+		public void MakeRoomForOne (int CacheSize, NodeDeleter onDelete) {
+			if (CacheSize == 0)
+				return;
+			while (Count > 0 && Count >= CacheSize) { // uncache until we have Room for one 
+				onDelete(this[0]);
+				RemoveAt(0); // Remove oldest chached Voxel
+			}
 		}
 
-		public void Destroy () {
-			Object.Destroy(go);
-			Object.Destroy(mesh);
-			mesh = null;
+		protected override OctreeCoord GetKeyForItem (TerrainNode item) {
+			return item.coord;
 		}
 	}
-
-	public class TerrainNode {
-		// A TerrainNode contains
-		//  a TerrainChunk as leaf node
-		//  or its 8 children Nodes as TerrainNode[8] array
-		// all 8 children must exist -> this way we do not have overlapping TerrainChunks
-		public object Content = null;
-			
-		public OctreeCoord coord;
-
-		public TerrainNode[] Children => Content as TerrainNode[];
-		public TerrainChunk TerrainChunk => Content as TerrainChunk;
-			
-		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
-	}
-
-	public struct OctreeCoord : System.IEquatable<OctreeCoord> { // Unique coordinate for each octree node position in the world
-		// 0 is cube of size VoxelSize * ChunkVoxels
-		// 1 is 2x the size aso.
-		public readonly int		lod;
-		// index of the cubes of this lod level
-		// (0,0,0) is the one with low corner on the orign (the one that spans (0,0,0) to (size,size,size) where size = VoxelSize * ChunkVoxels * 2 ^ lod)
-		// indecies are scaled by 2 to allow the root node to shift by half of it's size and still have a valid OctreeCoord
-		public readonly int3	index;
-
-		public OctreeCoord (int lod, int3 index) {
-			this.lod = lod;
-			this.index = index;
-		}
-
-		public static OctreeCoord FromWorldPos (float3 posWorld, int lod, float VoxelSize, int ChunkVoxels) {
-			return new OctreeCoord(lod, (int3)floor(posWorld / ((ChunkVoxels << lod) * VoxelSize * 0.5f)));
-		}
-		public float3 ToWorldCube (float VoxelSize, int ChunkVoxels, out float size) { // center, size from OctreeCoord
-			size = (ChunkVoxels << lod) * VoxelSize;
-			return ((float3)(index + 1) / 2) * size;
-		}
-			
-		public override string ToString () {
-			return string.Format("({0}, ({1}, {2}, {3}))", lod, index.x, index.y, index.z);
-		}
-			
-		//public override bool Equals (object obj) {
-		//	if (obj == null || GetType() != obj.GetType()) {
-		//		return false;
-		//	}
-		//
-		//	var r = (OctreeCoord)obj;
-		//	return lod == r.lod && all(index == r.index);
-		//}
-
-		bool System.IEquatable<OctreeCoord>.Equals(OctreeCoord other) {
-			return lod == other.lod && all(index == other.index);
-		}
-			
-		public override int GetHashCode () {
-			// https://stackoverflow.com/questions/1646807/quick-and-simple-hash-code-combinations
-			int hash = 1009;
-			hash = (hash * 9176) + lod;
-			hash = (hash * 9176) + index.x;
-			hash = (hash * 9176) + index.y;
-			hash = (hash * 9176) + index.z;
-			return hash;
-		}
-	};
 
 	public class TerrainOctree : MonoBehaviour {
 		
@@ -115,7 +39,7 @@ namespace OctreeGeneration {
 		public float LodFuncEnd = 16f;
 		public float LodFuncEndLod = 6f;
 		
-		public GameObject TerrainChunkPrefab;
+		public GameObject TerrainNodePrefab;
 		
 		public GameObject player;
 		
@@ -123,8 +47,69 @@ namespace OctreeGeneration {
 
 		float3 playerPos { get { return player.transform.position; } }
 		
-		public TerrainNode root;
+		// TerrainNodes are can be in a state of being voxelized, being meshed while they are either in the tree or in the cache
+		// The cache just represents nodes that are either supposed to be pregenerated (maybe when we notice that we have no workload currently) or were generated are now out of tree
+
+		public int CacheSize = 100;
+
+		public TerrainNode root = null; // Tree of visible TerrainNodes
+		public TerrainNodeCache cache = new TerrainNodeCache(); // cache of TerrainNodes that are out of tree
+		public List<TerrainNode> sortedNodes = new List<TerrainNode>(); // all nodes which get sorted 
 		
+		TerrainVoxelizer terrainVoxelizer;
+		TerrainMesher terrainMesher;
+		void Awake () {
+			terrainVoxelizer = GetComponent<TerrainVoxelizer>();
+			terrainMesher = GetComponent<TerrainMesher>();
+		}
+		
+		TerrainNode createNode (OctreeCoord coord, GameObject prefab, Transform parent) {
+			float3 pos = coord.ToWorldCube(VoxelSize, ChunkVoxels, out float size);
+
+			var n = new TerrainNode(coord, pos, TerrainNodePrefab, parent);
+			sortedNodes.Add(n);
+			return n;
+		}
+		void destroyNode (TerrainNode n) {
+			n.Destroy();
+			sortedNodes.Remove(n); // SLOW: O(N)
+		}
+
+		TerrainNode createNodeOrGetCached (OctreeCoord coord, GameObject prefab, Transform parent) {
+			TerrainNode node;
+			if (cache.Contains(coord)) {
+				node = cache[coord];
+				cache.Remove(coord); // Remove from cache since we now use the node
+				node.InTree = true;
+			} else {
+				node = createNode(coord, prefab, parent);
+			}
+			node.InTree = true;
+			return node;
+		}
+		void removeFromTreeRecursive (TerrainNode n) {
+			n.Parent = null;
+			if (n.Children != null)
+				for (int i=0; i<8; ++i)
+					removeFromTreeRecursive(n.Children[i]);
+			n.Children = null;
+
+			cache.MakeRoomForOne(CacheSize, destroyNode);
+			cache.Add(n);
+
+			n.InTree = false;
+		}
+
+		void clearAllNodes () {
+			if (root != null)
+				removeFromTreeRecursive(root);
+			foreach (var n in cache) {
+				destroyNode(n);
+			}
+			cache.Clear();
+			root = null;
+		}
+
 		public float CalcDistToPlayer (float3 chunkPos, float chunkSize) {
 			var closest = chunkPos + clamp(playerPos - chunkPos, -chunkSize/2, chunkSize/2);
 			return length(playerPos - closest);
@@ -141,17 +126,7 @@ namespace OctreeGeneration {
 			var lod = max(Mathf.FloorToInt( a * Mathf.Log(dist / Lod0ChunkSize) + b ), 0);
 			return lod;
 		}
-
-		void destroy (TerrainNode node) {
-			node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
-			
-			if (node.Children != null) { // destroy children if we have them
-				var children = node.Children;
-				for (int i=0; i<8; ++i)
-					destroy(children[i]);
-			}
-		}
-
+		
 		void updateTree (TerrainNode node) {
 			float size;
 			float3 pos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out size);
@@ -159,38 +134,26 @@ namespace OctreeGeneration {
 			float dist = CalcDistToPlayer(pos, size);
 			int desiredLod = calcLod(dist);
 			
-			if (node.TerrainChunk != null) {
-				node.TerrainChunk.latestDistToPlayer = dist;
-			}
+			node.latestDistToPlayer = dist;
 
 			bool wantChildren = desiredLod < node.coord.lod;
 			
 			if (wantChildren) {
-				Profiler.BeginSample("chachedSortedTerrainChunks.Remove()");
-				chachedSortedTerrainChunks.Remove(node);
-				Profiler.EndSample();
-
-				node.TerrainChunk?.Destroy(); // destroy TerrainChunk if we have one
-				
 				if (node.Children == null) { // Create Children if we dont already have them
-					var children = new TerrainNode[8];
+					node.Children = new TerrainNode[8];
+					
 					for (int i=0; i<8; ++i) {
-						children[i] = new TerrainNode {
-							coord = new OctreeCoord(node.coord.lod - 1, node.coord.index * 2 + TerrainNode.ChildOrder[i] * 2)
-						};
+						node.Children[i] = createNodeOrGetCached(
+							new OctreeCoord(node.coord.lod - 1, node.coord.index * 2 + TerrainNode.ChildOrder[i] * 2),
+							TerrainNodePrefab, this.transform); // Add the new or cached node to the tree by setting it as our child
 					}
-					node.Content = children;
 				}
 			} else {
-				if (node.Children != null) { // destroy children if we have them
+				if (node.Children != null) { // destroy Children if we have them
 					var children = node.Children;
 					for (int i=0; i<8; ++i)
-						destroy(children[i]);
-				}
-
-				if (node.TerrainChunk == null) {
-					node.Content = new TerrainChunk(pos, size, TerrainChunkPrefab, this.gameObject.transform);
-					chachedSortedTerrainChunks.Add(node);
+						removeFromTreeRecursive(children[i]);
+					node.Children = null;
 				}
 			}
 			
@@ -200,41 +163,43 @@ namespace OctreeGeneration {
 			}
 		}
 		
-		List<TerrainNode> chachedSortedTerrainChunks = new List<TerrainNode>();
-		public List<TerrainNode> SortedTerrainChunks => chachedSortedTerrainChunks;
-		
 		void resortNodeList () {
 			Profiler.BeginSample("resortNodeList()");
-			chachedSortedTerrainChunks.Sort( (l, r) => { // sort so that smallest chunks are before larger ones and closer ones are before further ones
-				int order = l.coord.lod.CompareTo(r.coord.lod);
-				return order != 0 ? order : l.TerrainChunk.latestDistToPlayer.CompareTo(r.TerrainChunk.latestDistToPlayer);
+			sortedNodes.Sort( (l, r) => {
+				int order =				-l.InTree				.CompareTo(r.InTree);
+				if (order == 0) order =	 l.coord.lod			.CompareTo(r.coord.lod);
+				if (order == 0) order =	 l.latestDistToPlayer	.CompareTo(r.latestDistToPlayer);
+				return order;
 			});
 			Profiler.EndSample();
 		}
 
 		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
-			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels) {
-				if (root != null)
-					destroy(root);
-				root = null; // rebuild tree
-			}
+			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels)
+				clearAllNodes(); // rebuild tree
 			
 			prevMaxLod = MaxLod;
 			prevVoxelSize = VoxelSize;
 			prevChunkVoxels = ChunkVoxels;
 			
 			if (root == null) {
-				root = new TerrainNode {
-					coord = new OctreeCoord(MaxLod, -1)
-				};
+				root = createNodeOrGetCached(new OctreeCoord(MaxLod, -1), TerrainNodePrefab, this.transform);
+				root.InTree = true;
 			}
 
 			updateTree(root);
 
 			resortNodeList();
+
+			terrainMesher.ManualUpdateStartJobs(sortedNodes, this);
+			terrainVoxelizer.ManualUpdate(sortedNodes, this);
+		}
+		void LateUpdate () {
+			terrainMesher.ManualUpdateFinishJobs(sortedNodes, this);
+
+			TerrainNode.UpdateTreeVisibility(root);
 		}
 
-		
 		static readonly Color[] drawColors = new Color[] {
 			Color.blue, Color.cyan, Color.green, Color.red, Color.yellow, Color.magenta, Color.gray,
 		};
@@ -248,10 +213,6 @@ namespace OctreeGeneration {
 
 			Gizmos.color = drawColors[clamp(n.coord.lod % drawColors.Length, 0, drawColors.Length-1)];
 			Gizmos.DrawWireCube(pos, (float3)size);
-
-			if (n.TerrainChunk != null) {
-				_countChunks++;
-			}
 			
 			if (n.Children != null) {
 				for (int i=0; i<8; ++i) {
@@ -279,8 +240,8 @@ namespace OctreeGeneration {
 			float Lod0ChunkSize = VoxelSize * ChunkVoxels;
 			float RootChunkSize = Lod0ChunkSize * Mathf.Pow(2f, MaxLod);
 			
-			GUI.Label(new Rect(0,  0, 500,30), "Terrain Chunks: "+ _countChunks);
-			GUI.Label(new Rect(0, 30, 500,30), "Terrain Octree Nodes: "+ _countNodes);
+			//GUI.Label(new Rect(0,  0, 500,30), "Terrain Chunks: "+ _countChunks);
+			GUI.Label(new Rect(0, 30, 500,30), "Terrain Nodes: "+ _countNodes);
 			GUI.Label(new Rect(0, 60, 500,30), "Root Chunk Size: "+ RootChunkSize);
 		}
 	}

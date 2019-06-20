@@ -23,11 +23,16 @@ namespace OctreeGeneration {
 	}
 	
 	public class Voxels {
-		public readonly OctreeCoord	coord;
 		public NativeArray<Voxel>	native;
+		public int refCount = 0;
 
-		public Voxels (OctreeCoord c) {
-			coord = c;
+		public void Use () {
+			refCount++;
+		}
+		public void Dispose () {
+			refCount--;
+			if (refCount == 0)
+				native.Dispose();
 		}
 
 		public static int _3dToFlatIndex (int3 pos, int ChunkVoxels) {
@@ -46,13 +51,6 @@ namespace OctreeGeneration {
 			voxelCoord.z = index;
 
 			return voxelCoord;
-		}
-	}
-
-	class VoxelCache : KeyedCollection<OctreeCoord, Voxels> {
-		
-		protected override OctreeCoord GetKeyForItem (Voxels item) {
-			return item.coord;
 		}
 	}
 
@@ -182,116 +180,114 @@ namespace OctreeGeneration {
 			}
 		}
 
-		class RunningJob {
+		public class RunningJob {
 			public Voxels voxels;
+			public TerrainNode node;
 			public JobHandle JobHandle;
 		}
 		
-		TerrainOctree octree;
-		TerrainMesher mesher;
+		public class TerrainNodeCache : KeyedCollection<OctreeCoord, TerrainNode> {
+			public delegate void NodeDeleter (TerrainNode n);
+		
+			public void MakeRoomForOne (int CacheSize, NodeDeleter onDelete) {
+				if (CacheSize == 0)
+					return;
+				while (Count > 0 && Count >= CacheSize) { // uncache until we have Room for one 
+					onDelete(this[0]);
+					RemoveAt(0); // Remove oldest chached Voxel
+				}
+			}
 
-		VoxelCache cache = new VoxelCache();
-
-		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
+			protected override OctreeCoord GetKeyForItem (TerrainNode item) {
+				return item.coord;
+			}
+		}
+		
+		List<RunningJob> runningJobs = new List<RunningJob>();
 		
 		public TerrainGenerator terrainGenerator;
 		public int MaxJobs = 3;
-		public int CacheSize = 512;
 		
-		void Awake () {
-			octree = GetComponent<TerrainOctree>();
-			mesher = GetComponent<TerrainMesher>();
-		}
-
-		public Voxels GetCachedVoxels (OctreeCoord coord) {
-			if (!cache.Contains(coord))
-				return null;
-			return cache[coord];
-		}
-		
-		void Update () {
-			if (octree.root == null)
-				return;
-
+		public void ManualUpdate (List<TerrainNode> sortedNodes, TerrainOctree octree) {
+			
 			Profiler.BeginSample("StartJob loop");
-			for (int i=0; i<octree.SortedTerrainChunks.Count; ++i) {
-				var chunk = octree.SortedTerrainChunks[i];
-				if (!cache.Contains(chunk.coord) && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
-					StartJob(chunk, octree.ChunkVoxels, terrainGenerator);
+			for (int i=0; i<sortedNodes.Count; ++i) {
+				var node = sortedNodes[i];
+				
+				if (	node.needsVoxelize && // A voxelize was flagged
+						runningJobs.Find(x => x.node.coord == node.coord) == null && // not running yet
+						runningJobs.Count < MaxJobs // not too many jobs yet
+						) {
+					StartJob(node, octree.VoxelSize, octree.ChunkVoxels, terrainGenerator);
 				}
 			}
 			Profiler.EndSample();
 
 			Profiler.BeginSample("Finish Jobs");
-			var toRemove = new List<OctreeCoord>();
-			
-			foreach (var job in runningJobs) {
-				if (job.Value.JobHandle.IsCompleted) {
-					job.Value.JobHandle.Complete();
+			for (int i=0; i<runningJobs.Count; ++i) {
+				var job = runningJobs[i];
 
-					while (cache.Count > 0 && cache.Count > (CacheSize -1)) { // uncache
-						cache.RemoveAt(0);
-					}
-
-					cache.Add(job.Value.voxels);
-					
-					toRemove.Add(job.Key);
+				if (job.JobHandle.IsCompleted) {
+					FinishJob(job);
+					runningJobs.RemoveAtSwapBack(i);
+				} else {
+					++i;
 				}
 			}
-			
-			foreach (var j in toRemove) {
-				runningJobs.Remove(j);
-			}
 			Profiler.EndSample();
 		}
 
-		void OnDestroy () {
-			Profiler.BeginSample("OnDestroy");
-			mesher.Dispose(); // stop running mesher jobs first, then dispose the voxels they might be using
-
-			foreach (var voxels in cache) {
-				voxels.native.Dispose();
-			}
-
-			foreach (var job in runningJobs) {
-				job.Value.JobHandle.Complete(); // block main thread
-				job.Value.voxels.native.Dispose();
-			}
-			Profiler.EndSample();
-		}
-
-		void StartJob (TerrainNode chunk, int ChunkVoxels, TerrainGenerator gen) {
+		void StartJob (TerrainNode node, float VoxelSize, int ChunkVoxels, TerrainGenerator gen) {
 			Profiler.BeginSample("StartJob");
 
 			int ArraySize = ChunkVoxels + 1;
 			int voxelsLength = ArraySize * ArraySize * ArraySize;
 			
 			Profiler.BeginSample("new NativeArray");
-			var runningJob = new RunningJob();
-			runningJob.voxels = new Voxels(chunk.coord) { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+			var voxels = new Voxels() { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+			voxels.Use();
 			Profiler.EndSample();
 			
+			var runningJob = new RunningJob { node = node, voxels = voxels };
+
 			Profiler.BeginSample("new Job");
 			var job = new Job {
-				ChunkPos = chunk.TerrainChunk.pos,
-				ChunkSize = chunk.TerrainChunk.size,
 				ChunkVoxels = ChunkVoxels,
 				Gen = gen,
 				voxels = runningJob.voxels.native
 			};
+			job.ChunkPos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out job.ChunkSize);
 			Profiler.EndSample();
 			
 			Profiler.BeginSample("job.Schedule");
-			runningJob.JobHandle = job.Schedule(voxelsLength, ChunkVoxels);
+			runningJob.JobHandle = job.Schedule(voxelsLength, ArraySize*8);
 			Profiler.EndSample();
 
-			runningJobs.Add(chunk.coord, runningJob);
+			runningJobs.Add(runningJob);
 
 			Profiler.EndSample();
 		}
+		void FinishJob (RunningJob job) {
+			Profiler.BeginSample("FinishJob");
+			job.JobHandle.Complete();
 
-		void OnGUI () {
-			GUI.Label(new Rect(0, 90, 500,30), "Voxelizer Cache: "+ cache.Count +" / "+ CacheSize);
+			job.node.AssignVoxels(job.voxels);
+			job.voxels.Dispose();
+			Profiler.EndSample();
+		}
+
+		void Dispose () {
+			Profiler.BeginSample("OnDestroy");
+			foreach (var job in runningJobs) {
+				job.JobHandle.Complete(); // block main thread
+				job.voxels.Dispose();
+			}
+			runningJobs.Clear();
+			Profiler.EndSample();
+		}
+
+		void OnDestroy () {
+			Dispose();
 		}
 	}
 }

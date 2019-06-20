@@ -99,86 +99,75 @@ namespace OctreeGeneration {
 			}
 		}
 		
-		class RunningJob {
-			public TerrainChunk chunk;
-			public Job job;
-			public JobHandle JobHandle;
+		public class RunningJob {
+			public TerrainNode	node;
+			public Job			job;
+			public JobHandle	JobHandle;
 		}
 		
-		TerrainOctree octree;
-		TerrainVoxelizer voxelizer;
-		
-		Dictionary<OctreeCoord, RunningJob> runningJobs = new Dictionary<OctreeCoord, RunningJob>();
+		List<RunningJob> runningJobs = new List<RunningJob>();
 		
 		public int MaxJobs = 10;
 		
-		void Awake () {
-			octree = GetComponent<TerrainOctree>();
-			voxelizer = GetComponent<TerrainVoxelizer>();
-		}
-		
-		void Update () {
-			if (octree.root == null)
-				return;
+		public void ManualUpdateStartJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
 			
 			Profiler.BeginSample("StartJob loop");
-			for (int i=0; i<octree.SortedTerrainChunks.Count; ++i) {
-				var chunk = octree.SortedTerrainChunks[i];
-				var voxels = voxelizer.GetCachedVoxels(chunk.coord);
-				if (chunk.TerrainChunk.needsRemesh && voxels != null && !runningJobs.ContainsKey(chunk.coord) && runningJobs.Count < MaxJobs) {
-					StartJob(chunk, octree.ChunkVoxels, voxels);
+			for (int i=0; i<sortedNodes.Count; ++i) {
+				var node = sortedNodes[i];
+				if (	node.needsRemesh && // remesh was flagged
+						node.voxels != null && // we have voxels yet (if these voxels are up to date or if there if already a voxelize job is handled by the octree)
+						runningJobs.Find(x => x.node.coord == node.coord) == null && // no job yet
+						runningJobs.Count < MaxJobs) { // not already too many jobs
+					StartJob(node, octree.VoxelSize, octree.ChunkVoxels);
 				}
 			}
 			Profiler.EndSample();
-		
-			Profiler.BeginSample("FinishJob loop");
-			var toRemove = new List<OctreeCoord>();
-		
-			foreach (var job in runningJobs) {
-				if (job.Value.JobHandle.IsCompleted) {
-					job.Value.JobHandle.Complete();
-		
-					FinishJob(job.Value);
-					
-					toRemove.Add(job.Key);
-				}
-			}
+		}
+		public void ManualUpdateFinishJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
 			
-			foreach (var j in toRemove) {
-				runningJobs.Remove(j);
+			Profiler.BeginSample("FinishJob loop");
+			for (int i=0; i<runningJobs.Count; ++i) {
+				var job = runningJobs[i];
+				if (job.JobHandle.IsCompleted) {
+					FinishJob(job);
+
+					runningJobs.RemoveAtSwapBack(i);
+				} else {
+					++i;
+				}
 			}
 			Profiler.EndSample();
 		}
 		
-		void StartJob (TerrainNode node, int ChunkVoxels, Voxels voxels) {
+		void StartJob (TerrainNode node, float VoxelSize, int ChunkVoxels) {
 			Profiler.BeginSample("StartJob()");
 			
 			Profiler.BeginSample("new RunningJob()");
-			var runningJob = new RunningJob();
+			var runningJob = new RunningJob { node = node };
 			Profiler.EndSample();
-
-			runningJob.chunk = node.TerrainChunk;
 			
+			int initCap = ChunkVoxels * ChunkVoxels * MarchingCubes.MaxVartsPerCell;
+			node.voxels.Use();
+
 			Profiler.BeginSample("new Job");
 			runningJob.job = new Job {
-				ChunkPos = node.TerrainChunk.pos,
-				ChunkSize = node.TerrainChunk.size,
 				ChunkVoxels = ChunkVoxels,
-				voxels = voxels.native,
+				voxels = node.voxels.native,
 				
-				vertices	= new NativeList<float3>(	Allocator.Persistent ),
-				normals		= new NativeList<float3>(	Allocator.Persistent ),
-				colors		= new NativeList<Color>(	Allocator.Persistent ),
-				uv			= new NativeList<float2>(	Allocator.Persistent ),
-				triangles	= new NativeList<int>(		Allocator.Persistent ),
+				vertices	= new NativeList<float3>(	initCap, Allocator.Persistent ),
+				normals		= new NativeList<float3>(	initCap, Allocator.Persistent ),
+				colors		= new NativeList<Color>(	initCap, Allocator.Persistent ),
+				uv			= new NativeList<float2>(	initCap, Allocator.Persistent ),
+				triangles	= new NativeList<int>(		initCap, Allocator.Persistent ),
 			};
+			runningJob.job.ChunkPos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out runningJob.job.ChunkSize);
 			Profiler.EndSample();
 
 			Profiler.BeginSample("job.Schedule");
 			runningJob.JobHandle = runningJob.job.Schedule();
 			Profiler.EndSample();
 		
-			runningJobs.Add(node.coord, runningJob);
+			runningJobs.Add(runningJob);
 			Profiler.EndSample();
 		}
 
@@ -190,30 +179,16 @@ namespace OctreeGeneration {
 		
 		void FinishJob (RunningJob job) {
 			Profiler.BeginSample("FinishJob");
+
 			job.JobHandle.Complete();
 			
-			if (job.chunk.mesh == null) {
-				// chunk was deleted, ignore result
+			job.node.voxels.Dispose();
+
+			if (job.node.IsDestroyed) {
+				// node was deleted, ignore result
 			} else {
-				job.chunk.mesh.Clear();
-				Profiler.BeginSample("NativeArray.ToArray() for mesh attributes");
-					Profiler.BeginSample("vertices");
-						job.chunk.mesh.SetVerticesNative(job.job.vertices, ref verticesBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("normals");
-						job.chunk.mesh.SetNormalsNative(job.job.normals, ref normalsBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("uv");
-						job.chunk.mesh.SetUvsNative(0, job.job.uv, ref uvsBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("colors");
-						job.chunk.mesh.SetColorsNative(job.job.colors, ref colorsBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("triangles");
-						job.chunk.mesh.SetTrianglesNative(job.job.triangles, 0, ref trianglesBuf);
-					Profiler.EndSample();
-				Profiler.EndSample();
-			
+				job.node.AssignMesh(job.job.vertices, ref verticesBuf, job.job.normals, ref normalsBuf, job.job.uv, ref uvsBuf, job.job.colors, ref colorsBuf, job.job.triangles, ref trianglesBuf);
+				
 				Profiler.BeginSample("NativeArray.Dispose");
 				job.job.vertices	.Dispose();
 				job.job.normals		.Dispose();
@@ -221,31 +196,22 @@ namespace OctreeGeneration {
 				job.job.uv			.Dispose();
 				job.job.triangles	.Dispose();
 				Profiler.EndSample();
-
-				job.chunk.needsRemesh = false;
 			}
 			Profiler.EndSample();
 		}
 		
 		public void Dispose () {
 			Profiler.BeginSample("Dispose");
-			var toRemove = new List<OctreeCoord>();
-
 			foreach (var job in runningJobs) {
-				job.Value.JobHandle.Complete(); // block main thread
+				job.JobHandle.Complete(); // block main thread
 				
-				job.Value.job.vertices.Dispose();
-				job.Value.job.normals.Dispose();
-				job.Value.job.colors.Dispose();
-				job.Value.job.uv.Dispose();
-				job.Value.job.triangles.Dispose();
-				
-				toRemove.Add(job.Key);
+				job.job.vertices.Dispose();
+				job.job.normals.Dispose();
+				job.job.colors.Dispose();
+				job.job.uv.Dispose();
+				job.job.triangles.Dispose();
 			}
-			
-			foreach (var j in toRemove) {
-				runningJobs.Remove(j);
-			}
+			runningJobs.Clear();
 			Profiler.EndSample();
 		}
 
