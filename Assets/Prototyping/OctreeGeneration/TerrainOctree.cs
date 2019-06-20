@@ -30,14 +30,18 @@ namespace OctreeGeneration {
 		public int ChunkVoxels = 32;
 		[Range(0, 15)]
 		public int MaxLod = 5;
-		
-		float prevVoxelSize;
-		int prevChunkVoxels;
-		int prevMaxLod;
 
 		public float LodFuncStart = 0.5f;
 		public float LodFuncEnd = 16f;
 		public float LodFuncEndLod = 6f;
+		
+		[Range(-2f, 2f)]
+		public float DensityIsoLevel = 0f;
+		
+		float prevVoxelSize;
+		int prevChunkVoxels;
+		int prevMaxLod;
+		float prevDensityIsoLevel;
 		
 		public GameObject TerrainNodePrefab;
 		
@@ -68,6 +72,11 @@ namespace OctreeGeneration {
 
 			var n = new TerrainNode(coord, pos, TerrainNodePrefab, parent);
 			sortedNodes.Add(n);
+			{
+				var dbg = n.go.GetComponent<TerrainNodeDebug>();
+				if (dbg != null)
+					dbg.node = n;
+			}
 			return n;
 		}
 		void destroyNode (TerrainNode n) {
@@ -175,12 +184,15 @@ namespace OctreeGeneration {
 		}
 
 		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
-			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels)
+			if (	MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels
+				  || DensityIsoLevel != prevDensityIsoLevel
+				  )
 				clearAllNodes(); // rebuild tree
 			
 			prevMaxLod = MaxLod;
 			prevVoxelSize = VoxelSize;
 			prevChunkVoxels = ChunkVoxels;
+			prevDensityIsoLevel = DensityIsoLevel;
 			
 			if (root == null) {
 				root = createNodeOrGetCached(new OctreeCoord(MaxLod, -1), TerrainNodePrefab, this.transform);

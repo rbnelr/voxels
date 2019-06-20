@@ -17,6 +17,7 @@ namespace OctreeGeneration {
 			[ReadOnly] public float ChunkSize;
 			[ReadOnly] public int ChunkVoxels;
 			[ReadOnly] public NativeArray<Voxel> voxels;
+			[ReadOnly] public float DensityIsoLevel;
 
 			[WriteOnly] public NativeList<float3>	vertices;
 			[WriteOnly] public NativeList<float3>	normals;
@@ -59,11 +60,13 @@ namespace OctreeGeneration {
 							
 								var voxel = voxels[Voxels._3dToFlatIndex(voxel_index, ChunkVoxels)];
 
-								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white };
-								cell.val[i] = voxel.density;
+								//var c = normalize(voxel.gradient) * 0.5f + 0.5f;
+								var c = normalize(voxel.gradient);
+								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white, /*new Color(c.x,c.y,c.z),*/ normal = normalize(voxel.gradient) };
+								cell.val[i] = voxel.distance;
 							}
 							
-							int ntriangles = MarchingCubes.Polygonise(cell, 0.0f, verts, ref vertlist);
+							int ntriangles = MarchingCubes.Polygonise(cell, DensityIsoLevel, verts, ref vertlist);
 						
 							for (int i=0; i<ntriangles; ++i) {
 								var a = verts[i*3 +0];
@@ -75,10 +78,14 @@ namespace OctreeGeneration {
 								vertices.Add(c.pos);
 
 								var flatNormal = cross(b.pos - a.pos, c.pos - a.pos);
-
+								
 								normals.Add(flatNormal);
 								normals.Add(flatNormal);
 								normals.Add(flatNormal);
+								
+								//normals.Add(a.normal);
+								//normals.Add(b.normal);
+								//normals.Add(c.normal);
 							
 								colors.Add(a.color);
 								colors.Add(b.color);
@@ -118,7 +125,7 @@ namespace OctreeGeneration {
 						node.voxels != null && // we have voxels yet (if these voxels are up to date or if there if already a voxelize job is handled by the octree)
 						runningJobs.Find(x => x.node.coord == node.coord) == null && // no job yet
 						runningJobs.Count < MaxJobs) { // not already too many jobs
-					StartJob(node, octree.VoxelSize, octree.ChunkVoxels);
+					StartJob(node, octree.VoxelSize, octree.ChunkVoxels, octree.DensityIsoLevel);
 				}
 			}
 			Profiler.EndSample();
@@ -139,7 +146,7 @@ namespace OctreeGeneration {
 			Profiler.EndSample();
 		}
 		
-		void StartJob (TerrainNode node, float VoxelSize, int ChunkVoxels) {
+		void StartJob (TerrainNode node, float VoxelSize, int ChunkVoxels, float DensityIsoLevel) {
 			Profiler.BeginSample("StartJob()");
 			
 			Profiler.BeginSample("new RunningJob()");
@@ -153,6 +160,7 @@ namespace OctreeGeneration {
 			runningJob.job = new Job {
 				ChunkVoxels = ChunkVoxels,
 				voxels = node.voxels.native,
+				DensityIsoLevel = DensityIsoLevel,
 				
 				vertices	= new NativeList<float3>(	initCap, Allocator.Persistent ),
 				normals		= new NativeList<float3>(	initCap, Allocator.Persistent ),

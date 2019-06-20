@@ -11,10 +11,12 @@ namespace OctreeGeneration {
 		public struct Vertex {
 			public float3 pos;
 			public Color  color;
+			public float3 normal;
 
 			public static Vertex Lerp (Vertex a, Vertex b, float t) {
-				a.pos   = a.pos   + (b.pos   - a.pos  ) * t;
-				a.color = a.color + (b.color - a.color) * t;
+				a.pos    = a.pos    + (b.pos    - a.pos   ) * t;
+				a.color  = a.color  + (b.color  - a.color ) * t;
+				a.normal = a.normal + (b.normal - a.normal) * t;
 				return a;
 			}
 		}

@@ -7,18 +7,21 @@ using System.Collections.Generic;
 using Unity.Burst;
 using UnityEngine.Profiling;
 using System.Collections.ObjectModel;
+using static NoiseExt;
 
 namespace OctreeGeneration {
 	public struct Voxel {
-		public float density;
+		public float distance;
+		public float3 gradient;
 		
 		public static Voxel Lerp (Voxel a, Voxel b, float t) {
-			a.density	= a.density + (b.density	- a.density	) * t;
+			a.distance  = a.distance  + (b.distance  - a.distance ) * t;
+			a.gradient = a.gradient + (b.gradient - a.gradient) * t;
 			return a;
 		}
 
 		public override string ToString () {
-			return density.ToString();
+			return distance.ToString();
 		}
 	}
 	
@@ -56,46 +59,6 @@ namespace OctreeGeneration {
 
 	public struct TerrainGenerator {
 		
-		float fractal (float pos, int octaves, float freq, bool dampen=true) {
-			float dampened = dampen ? freq : 1f;
-			float total = noise.snoise(float2(pos, 999) / freq);
-			float amplitude = 1.0f;
-			float range = 1.0f;
-			for (int i=1; i<octaves; ++i) {
-				freq /= 2;
-				amplitude /= 2;
-				range += amplitude;
-				total += noise.snoise(float2(pos, 999) / freq) * amplitude;
-			}
-			return total / range * dampened;
-		}
-		float fractal (float2 pos, int octaves, float freq, bool dampen=true) {
-			float dampened = dampen ? freq : 1f;
-			float total = noise.snoise(pos / freq);
-			float amplitude = 1.0f;
-			float range = 1.0f;
-			for (int i=1; i<octaves; ++i) {
-				freq /= 2;
-				amplitude /= 2;
-				range += amplitude;
-				total += noise.snoise(pos / freq) * amplitude;
-			}
-			return total / range * dampened;
-		}
-		float fractal (float3 pos, int octaves, float freq, bool dampen=true) {
-			float dampened = dampen ? freq : 1f;
-			float total = noise.snoise(pos / freq);
-			float amplitude = 1.0f;
-			float range = 1.0f;
-			for (int i=1; i<octaves; ++i) {
-				freq /= 2;
-				amplitude /= 2;
-				range += amplitude;
-				total += noise.snoise(pos / freq) * amplitude;
-			}
-			return total / range * dampened;
-		}
-
 		float smooth_func (float x, float n) {
 			if (x > n/4f)
 				return 0f;
@@ -109,31 +72,40 @@ namespace OctreeGeneration {
 		}
 
 		// units height from surface
-		public float Surface (float3 pos) {
+		public NoiseSample3 Surface (float3 pos) {
 			float2 pos2d = pos.xz;
 
-			float height = fractal(pos2d + 3000, 6, 4000) * 0.1f;
+			var height = fsnoise(pos2d + 3000, 6, 4000) * 0.1f;
 			//float height = fractal(pos2d + 3000, 4, 4000) * 0.1f;
 
-			return pos.y - height;
+			var val = pos.y - height;
+
+			return new NoiseSample3 { // map from 2d noise gradients to 3d
+				val = val.val,
+				gradient = float3(val.gradient.x, 0, val.gradient.y)
+			};
 		}
 		// TODO: change to be a "multiplier" for cave intensity
-		public float Abyss (float3 pos) {
-			float2 pos2d = pos.xz;
-
-			float radius = 555;
+		//public float Abyss (float3 pos) {
+		//	float2 pos2d = pos.xz;
+		//
+		//	float radius = 555;
+		//	
+		//	var strength = fsnoise(pos.y + 999, 2, radius * 6, false);
+		//
+		//	pos2d.x += fsnoise(pos.y + 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
+		//	pos2d.y += fsnoise(pos.y - 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
+		//
+		//	radius *= 1f + fsnoise(pos.y + 20000, 3, radius * 4, false) * 0.7f;
+		//
+		//	return (radius - length(pos2d)) / radius;
+		//}
+		public NoiseSample3 Cave (float3 pos) {
+			//return fsnoise(pos, 3, 400, false);
 			
-			float strength = fractal(pos.y + 999, 2, radius * 6, false);
+			var val = noise.snoise(pos / 100) + 0.42f;
 
-			pos2d.x += fractal(pos.y + 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
-			pos2d.y += fractal(pos.y - 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
-
-			radius *= 1f + fractal(pos.y + 20000, 3, radius * 4, false) * 0.7f;
-
-			return (radius - length(pos2d)) / radius;
-		}
-		public float Cave (float3 pos) {
-			return fractal(pos, 3, 400, false);
+			return new NoiseSample3 { val=val, gradient = 0 };
 		}
 		public Voxel Generate (float3 pos) {
 			//return new Voxel {
@@ -142,18 +114,23 @@ namespace OctreeGeneration {
 
 			var surf = Surface(pos);
 			
-			var abyss = Abyss(pos);
+			//var abyss = Abyss(pos);
 			var cave = Cave(pos);
-
-			cave = cave - 1f + abyss * 2.2f;
-
-			var val = smooth_union(surf, cave, 2000f);
-
-			//val += fractal(pos + 400, 5, 220) * 0.15f;
+			
+			//cave = cave - 1f + abyss * 2.2f;
 			
 			return new Voxel {
-				density = val,
+				distance = cave.val,
+				gradient = cave.gradient,
 			};
+			
+			//var val = smooth_union(surf, cave, 2000f);
+			//
+			////val += fractal(pos + 400, 5, 220) * 0.15f;
+			//
+			//return new Voxel {
+			//	distance = val,
+			//};
 		}
 	}
 	
