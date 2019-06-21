@@ -9,16 +9,16 @@ namespace OctreeGeneration {
 		public TerrainNode node;
 
 		void drawGradientArrow (float3 pos, float3 norm) {
-			Gizmos.DrawRay(pos + (float3)transform.position, norm * 3);
+			Gizmos.DrawRay(pos + (float3)transform.position, norm * (node.coord.lod + 1) * 5);
 		}
 
 		void OnDrawGizmosSelected () {
-			//if (node != null && node.mesh != null) {
-			//	var vert = node.mesh.vertices;
-			//	var norm = node.mesh.normals;
-			//	for (int i=0; i<vert.Length; ++i)
-			//		drawGradientArrow(vert[i], norm[i]);
-			//}
+			if (node != null && node.mesh != null) {
+				var vert = node.mesh.vertices;
+				var norm = node.mesh.normals;
+				for (int i=0; i<vert.Length; ++i)
+					drawGradientArrow(vert[i], norm[i]);
+			}
 		}
 	}
 }

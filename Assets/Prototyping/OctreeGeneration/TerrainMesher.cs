@@ -62,7 +62,7 @@ namespace OctreeGeneration {
 
 								//var c = normalize(voxel.gradient) * 0.5f + 0.5f;
 								var c = normalize(voxel.gradient);
-								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = Color.white, /*new Color(c.x,c.y,c.z),*/ normal = normalize(voxel.gradient) };
+								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = new Color(c.x,c.y,c.z), normal = normalize(voxel.gradient) };
 								cell.val[i] = voxel.distance;
 							}
 							
@@ -77,15 +77,15 @@ namespace OctreeGeneration {
 								vertices.Add(b.pos);
 								vertices.Add(c.pos);
 
-								var flatNormal = cross(b.pos - a.pos, c.pos - a.pos);
+								//var flatNormal = cross(b.pos - a.pos, c.pos - a.pos);
+								//
+								//normals.Add(flatNormal);
+								//normals.Add(flatNormal);
+								//normals.Add(flatNormal);
 								
-								normals.Add(flatNormal);
-								normals.Add(flatNormal);
-								normals.Add(flatNormal);
-								
-								//normals.Add(a.normal);
-								//normals.Add(b.normal);
-								//normals.Add(c.normal);
+								normals.Add(a.normal);
+								normals.Add(b.normal);
+								normals.Add(c.normal);
 							
 								colors.Add(a.color);
 								colors.Add(b.color);

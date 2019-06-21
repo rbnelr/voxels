@@ -75,7 +75,7 @@ namespace OctreeGeneration {
 		public NoiseSample3 Surface (float3 pos) {
 			float2 pos2d = pos.xz;
 
-			var height = fsnoise(pos2d + 3000, 6, 4000) * 0.1f;
+			var height = fsnoise(pos2d + 3000, 4000, 6, true) * 0.1f;
 			//float height = fractal(pos2d + 3000, 4, 4000) * 0.1f;
 
 			var val = pos.y - height;
@@ -86,26 +86,34 @@ namespace OctreeGeneration {
 			};
 		}
 		// TODO: change to be a "multiplier" for cave intensity
-		//public float Abyss (float3 pos) {
-		//	float2 pos2d = pos.xz;
-		//
-		//	float radius = 555;
-		//	
-		//	var strength = fsnoise(pos.y + 999, 2, radius * 6, false);
-		//
-		//	pos2d.x += fsnoise(pos.y + 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
-		//	pos2d.y += fsnoise(pos.y - 10000, 3, radius * 2, false) * radius * (0.6f + strength * 0.5f);
-		//
-		//	radius *= 1f + fsnoise(pos.y + 20000, 3, radius * 4, false) * 0.7f;
-		//
-		//	return (radius - length(pos2d)) / radius;
-		//}
-		public NoiseSample3 Cave (float3 pos) {
-			//return fsnoise(pos, 3, 400, false);
-			
-			var val = Unity.Mathematics.noise.snoise(pos / 100) + 0.42f;
+		public NoiseSample3 Abyss (float3 pos) {
+			var abyssX = new NoiseSample3 { val = pos.x, gradient = float3(1,0,0) };
+			var abyssZ = new NoiseSample3 { val = pos.z, gradient = float3(0,0,1) };
+		
+			const float radius = 555;
 
-			return new NoiseSample3 { val=val, gradient = 0 };
+			var strength = fsnoise(pos.y + 999, radius * 6, 2);
+			
+			var offsX = fsnoise(pos.y + 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
+			var offsZ = fsnoise(pos.y - 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
+
+			abyssX.val += offsX.val;
+			abyssX.gradient.y += offsX.gradient;
+			
+			abyssZ.val += offsZ.val;
+			abyssZ.gradient.y += offsZ.gradient;
+
+			//abyssY += fsnoise(pos.y - 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
+		
+			var radiusSample = new NoiseSample3 { val = 555, gradient = 0 };
+			
+			var radiusScale = 1f + fsnoise(pos.y + 20000, radius * 4, 3) * 0.7f;
+			radiusSample *= new NoiseSample3 { val = radiusScale.val, gradient = float3(0, radiusScale.gradient, 0) };
+		
+			return (radiusSample - sqrt(abyssX*abyssX + abyssZ*abyssZ)) / radiusSample;
+		}
+		public NoiseSample3 Cave (float3 pos) {
+			return fsnoise(pos, 600, 3);
 		}
 		public Voxel Generate (float3 pos) {
 			//return new Voxel {
@@ -114,11 +122,11 @@ namespace OctreeGeneration {
 
 			var surf = Surface(pos);
 			
-			//var abyss = Abyss(pos);
+			var abyss = Abyss(pos);
 			var cave = Cave(pos);
 			
-			//cave = cave - 1f + abyss * 2.2f;
-			
+			cave = cave - 1f + abyss * 2.2f;
+
 			return new Voxel {
 				distance = cave.val,
 				gradient = cave.gradient,
