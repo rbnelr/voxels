@@ -248,9 +248,11 @@ public static class NoiseExt {
 	//  f(2 * x) => 2 * f'(x)
 	// TODO: implement NoiseSample1 as input to snoise(float) ?
 
-	const float _fixBugX = 7f / 3f; 
-	const float _fixBugY = 19f / 7f;
-	const float _fixBugZ = 7f / 13f;
+	// NOTE: Unity.Mathemathics.noise.snoise has a bug that causes it to return a 'wrong' value at x=y=z (inside some/all of it's simplex cells?) most notably at the origin world_x=world_y=world_z
+	// offset the final 3d pos going into the library function by prime fractions in hope that our voxel generator never hits these special positions (we should mainly query at integer fractions like int/int freq)
+	const float _fixBugX = 7f / 3f / 100f; 
+	const float _fixBugY = 19f / 7f / 100f;
+	const float _fixBugZ = 7f / 13f / 100f;
 	
 	public static NoiseSample1 snoise (float pos, float invFreq) {
 		var sampl = new NoiseSample1();
