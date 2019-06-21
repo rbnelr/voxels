@@ -12,11 +12,12 @@ using static NoiseExt;
 namespace OctreeGeneration {
 	public struct Voxel {
 		public float distance;
-		public float3 gradient;
+		public float3 gradientAnalytic;
+		public float3 gradientNumeric;
 		
 		public static Voxel Lerp (Voxel a, Voxel b, float t) {
 			a.distance  = a.distance  + (b.distance  - a.distance ) * t;
-			a.gradient = a.gradient + (b.gradient - a.gradient) * t;
+			a.gradientAnalytic = a.gradientAnalytic + (b.gradientAnalytic - a.gradientAnalytic) * t;
 			return a;
 		}
 
@@ -126,10 +127,10 @@ namespace OctreeGeneration {
 			var cave = Cave(pos);
 			
 			cave = cave - 1f + abyss * 2.2f;
-
+			
 			return new Voxel {
 				distance = cave.val,
-				gradient = cave.gradient,
+				gradientAnalytic = cave.gradient,
 			};
 			
 			//var val = smooth_union(surf, cave, 2000f);

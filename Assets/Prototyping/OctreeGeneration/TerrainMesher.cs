@@ -61,8 +61,8 @@ namespace OctreeGeneration {
 								var voxel = voxels[Voxels._3dToFlatIndex(voxel_index, ChunkVoxels)];
 
 								//var c = normalize(voxel.gradient) * 0.5f + 0.5f;
-								var c = normalize(voxel.gradient);
-								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = new Color(c.x,c.y,c.z), normal = normalize(voxel.gradient) };
+								var c = normalize(voxel.gradientAnalytic);
+								cell.vert[i] = new MarchingCubes.Vertex { pos = pos_local, color = new Color(c.x,c.y,c.z), normal = normalize(voxel.gradientAnalytic) };
 								cell.val[i] = voxel.distance;
 							}
 							

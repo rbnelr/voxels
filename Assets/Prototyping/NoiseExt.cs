@@ -149,14 +149,14 @@ public static class NoiseExt {
 		}
 		// (c / f(x))' = (-c * f'(x)) / (f(x)^2)
 		public static NoiseSample2 operator/ (float l, NoiseSample2 r) {
-			r.val = l / r.val;
 			r.gradient = (-l * r.gradient) / (r.val * r.val);
+			r.val = l / r.val;
 			return r;
 		}
 		// (f(x) / g(x))' = (f'(x) / g(x) - g'(x) / f(x)) / (g(x)^2)
 		public static NoiseSample2 operator/ (NoiseSample2 l, NoiseSample2 r) {
+			l.gradient = (l.gradient * r.val - r.gradient * l.val) / (r.val * r.val);
 			l.val = l.val / r.val;
-			l.gradient = (l.gradient * r.val + r.gradient * l.val) / (r.val * r.val);
 			return l;
 		}
 	}
