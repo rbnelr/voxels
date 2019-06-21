@@ -97,14 +97,12 @@ namespace OctreeGeneration {
 			
 			var offsX = fsnoise(pos.y + 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
 			var offsZ = fsnoise(pos.y - 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
-
+			
 			abyssX.val += offsX.val;
 			abyssX.gradient.y += offsX.gradient;
 			
 			abyssZ.val += offsZ.val;
 			abyssZ.gradient.y += offsZ.gradient;
-
-			//abyssY += fsnoise(pos.y - 10000, radius * 2, 3) * radius * (0.6f + strength * 0.5f);
 		
 			var radiusSample = new NoiseSample3 { val = 555, gradient = 0 };
 			
@@ -120,7 +118,7 @@ namespace OctreeGeneration {
 			//return new Voxel {
 			//	density = dot(pos, normalize(float3(1,2,3))),
 			//};
-
+			
 			var surf = Surface(pos);
 			
 			var abyss = Abyss(pos);
@@ -246,7 +244,7 @@ namespace OctreeGeneration {
 			Profiler.EndSample();
 			
 			Profiler.BeginSample("job.Schedule");
-			runningJob.JobHandle = job.Schedule(voxelsLength, ArraySize*8);
+			runningJob.JobHandle = job.Schedule(voxelsLength, ArraySize);
 			Profiler.EndSample();
 
 			runningJobs.Add(runningJob);

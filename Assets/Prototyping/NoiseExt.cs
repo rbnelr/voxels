@@ -248,11 +248,15 @@ public static class NoiseExt {
 	//  f(2 * x) => 2 * f'(x)
 	// TODO: implement NoiseSample1 as input to snoise(float) ?
 
+	const float _fixBugX = 7f / 3f; 
+	const float _fixBugY = 19f / 7f;
+	const float _fixBugZ = 7f / 13f;
+	
 	public static NoiseSample1 snoise (float pos, float invFreq) {
 		var sampl = new NoiseSample1();
 	#if true
 		float3 deriv3;
-		sampl.val = noise.snoise(float3(pos * invFreq, 0f, 0f), out deriv3);
+		sampl.val = noise.snoise(float3(pos * invFreq + _fixBugX, 0f, 0f), out deriv3);
 		sampl.gradient = deriv3.x * invFreq;
 	#else
 		float3 val = noise.srdnoise(float2(v * invFreq, 0));
@@ -265,7 +269,7 @@ public static class NoiseExt {
 		var sampl = new NoiseSample2();
 	#if true
 		float3 deriv3;
-		sampl.val = noise.snoise(float3(pos * invFreq, 0f), out deriv3);
+		sampl.val = noise.snoise(float3(pos * invFreq + float2(_fixBugX, _fixBugY), 0f), out deriv3);
 		sampl.gradient = deriv3.xy * invFreq;
 	#else
 		float3 val = noise.srdnoise(v * invFreq);
@@ -276,7 +280,7 @@ public static class NoiseExt {
 	}
 	public static NoiseSample3 snoise (float3 pos, float3 invFreq) {
 		var sampl = new NoiseSample3();
-		sampl.val = noise.snoise(pos * invFreq, out sampl.gradient);
+		sampl.val = noise.snoise(pos * invFreq + float3(_fixBugX, _fixBugY, _fixBugZ), out sampl.gradient);
 		sampl.gradient *= invFreq;
 		return sampl;
 	}
