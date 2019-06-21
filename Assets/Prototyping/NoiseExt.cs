@@ -2,11 +2,12 @@
 using static Unity.Mathematics.math;
 
 public static class NoiseExt {
+
+	//// Warning: the float values of the NoiseSample operators are assumend to be constants over noise input space, ie. dont multiply,add,sub a NoiseSample with pos.x or anything resulting from pos
+	
 	public struct NoiseSample1 {
 		public float val;
 		public float gradient;
-
-		//// Warning: float values are assumend to be constants over noise input space, ie. dont multiply,add,sub a NoiseSample1 with pos.x or anything resulting from pos
 		
 		// (f(x) + c)' = f'(x)
 		public static NoiseSample1 operator+ (NoiseSample1 l, float r) {
@@ -62,7 +63,6 @@ public static class NoiseExt {
 			return l;
 		}
 		
-		// TODO: Div not tested well
 		// (f(x) / c)' = f'(x) / c
 		public static NoiseSample1 operator/ (NoiseSample1 l, float r) {
 			l.val /= r;
@@ -139,8 +139,7 @@ public static class NoiseExt {
 			l.gradient = l.val * r.gradient + l.gradient * r.val;
 			return l;
 		}
-
-		// TODO: Div not tested well
+		
 		// (f(x) / c)' = f'(x) / c
 		public static NoiseSample2 operator/ (NoiseSample2 l, float r) {
 			l.val /= r;
@@ -149,14 +148,14 @@ public static class NoiseExt {
 		}
 		// (c / f(x))' = (-c * f'(x)) / (f(x)^2)
 		public static NoiseSample2 operator/ (float l, NoiseSample2 r) {
-			r.gradient = (-l * r.gradient) / (r.val * r.val);
 			r.val = l / r.val;
+			r.gradient = (-l * r.gradient) / (r.val * r.val);
 			return r;
 		}
 		// (f(x) / g(x))' = (f'(x) / g(x) - g'(x) / f(x)) / (g(x)^2)
 		public static NoiseSample2 operator/ (NoiseSample2 l, NoiseSample2 r) {
-			l.gradient = (l.gradient * r.val - r.gradient * l.val) / (r.val * r.val);
 			l.val = l.val / r.val;
+			l.gradient = (l.gradient * r.val + r.gradient * l.val) / (r.val * r.val);
 			return l;
 		}
 	}
@@ -218,7 +217,6 @@ public static class NoiseExt {
 			return l;
 		}
 		
-		// TODO: Div not tested well
 		// (f(x) / c)' = f'(x) / c
 		public static NoiseSample3 operator/ (NoiseSample3 l, float r) {
 			l.val /= r;
@@ -248,8 +246,7 @@ public static class NoiseExt {
 	// WARNING: you cannot scale or otherwise modify the position input of the noise functions, since this will not be respected in the gradient
 	//  f(    x) =>     f'(x)
 	//  f(2 * x) => 2 * f'(x)
-	// TODO: implement NoiseSample1as input to snoise(float) ?
-	//   
+	// TODO: implement NoiseSample1 as input to snoise(float) ?
 
 	public static NoiseSample1 snoise (float pos, float invFreq) {
 		var sampl = new NoiseSample1();
