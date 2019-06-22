@@ -119,6 +119,8 @@ namespace OctreeGeneration {
 			//	density = dot(pos, normalize(float3(1,2,3))),
 			//};
 			
+			pos *= 12f; // for testing
+
 			var surf = Surface(pos);
 			
 			var abyss = Abyss(pos);
@@ -126,6 +128,10 @@ namespace OctreeGeneration {
 			
 			cave = cave - 1f + abyss * 2.2f;
 			
+			pos /= 12f;
+			cave = min(cave, Cube(pos, float3(14f, 0.5f, 10.6f), 5f));
+			cave = min(cave, Sphere(pos, float3(14f, 0.7f, 10.6f - 8f), 3f));
+
 			return new Voxel {
 				distance = cave.val,
 				gradientAnalytic = cave.gradient,
@@ -138,6 +144,43 @@ namespace OctreeGeneration {
 			//return new Voxel {
 			//	distance = val,
 			//};
+		}
+
+		public static int getLargestAxis (float3 v) {
+			int i = v.x >= v.y ? 0 : 1;
+			i = v[i] >= v.z ? i : 2;
+			return i;
+		}
+		public NoiseSample3 Cube (float3 pos, float3 cubePos, float3 radius) {
+			pos -= cubePos; // cube is now at origin
+			
+			float val ;
+			float3 gradient;
+
+			if (all(pos == 0)) {
+				val = 0;
+				gradient = float3(0, 1, 0);
+			} else {
+				int axis = getLargestAxis(abs(pos));
+
+				gradient = 0;
+				gradient[axis] = sign(pos[axis]);
+
+				val = abs(pos[axis]) - radius[axis];
+			}
+
+			return new NoiseSample3 {
+				val = val,
+				gradient = gradient,
+			};
+		}
+		public NoiseSample3 Sphere (float3 pos, float3 spherePos, float radius) {
+			float3 offs = pos - spherePos;
+			
+			return new NoiseSample3 {
+				val = length(offs) - radius,
+				gradient = normalizesafe(offs),
+			};
 		}
 	}
 	

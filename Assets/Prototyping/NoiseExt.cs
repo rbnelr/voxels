@@ -242,6 +242,16 @@ public static class NoiseExt {
 		x.gradient = 0.5f / x.val * x.gradient;
 		return x;
 	}
+	public static NoiseSample3 min (NoiseSample3 l, NoiseSample3 r) {
+		l.gradient = select(r.gradient, l.gradient, l.val <= r.val);
+		l.val = math.min(l.val, r.val);
+		return l;
+	}
+	public static NoiseSample3 max (NoiseSample3 l, NoiseSample3 r) {
+		l.gradient = select(r.gradient, l.gradient, l.val >= r.val);
+		l.val = math.max(l.val, r.val);
+		return l;
+	}
 
 	// WARNING: you cannot scale or otherwise modify the position input of the noise functions, since this will not be respected in the gradient
 	//  f(    x) =>     f'(x)
@@ -260,7 +270,7 @@ public static class NoiseExt {
 		float3 deriv3;
 		sampl.val = noise.snoise(float3(pos * invFreq + _fixBugX, 0f, 0f), out deriv3);
 		sampl.gradient = deriv3.x * invFreq;
-	#else
+	#else // this source code looks like it is slower then the 3d version above
 		float3 val = noise.srdnoise(float2(v * invFreq, 0));
 		sampl.val = val.x;
 		sampl.gradient = val.y * invFreq;
@@ -273,7 +283,7 @@ public static class NoiseExt {
 		float3 deriv3;
 		sampl.val = noise.snoise(float3(pos * invFreq + float2(_fixBugX, _fixBugY), 0f), out deriv3);
 		sampl.gradient = deriv3.xy * invFreq;
-	#else
+	#else // this source code looks like it is slower then the 3d version above
 		float3 val = noise.srdnoise(v * invFreq);
 		sampl.val = val.x;
 		sampl.gradient = val.yz * invFreq;
