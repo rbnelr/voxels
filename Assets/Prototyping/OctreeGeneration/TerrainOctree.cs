@@ -38,16 +38,22 @@ namespace OctreeGeneration {
 		[Range(-2f, 2f)]
 		public float DensityIsoLevel = 0f;
 		
+		public float DCIterStrength = 1f;
+		public int DCMaxIterations = 5;
+		
 		float prevVoxelSize;
 		int prevChunkVoxels;
 		int prevMaxLod;
 		float prevDensityIsoLevel;
+		float prevDCIterStrength;
+		int prevDCIterations;
 		
 		public GameObject TerrainNodePrefab;
 		
 		public GameObject player;
 		
 		public bool AlwaysDrawOctree = false;
+		public bool DrawNormals = false;
 
 		float3 playerPos { get { return player.transform.position; } }
 		
@@ -186,6 +192,7 @@ namespace OctreeGeneration {
 		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
 			if (	MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels
 				  || DensityIsoLevel != prevDensityIsoLevel
+				  || DCIterStrength != prevDCIterStrength || DCMaxIterations != prevDCIterations
 				  )
 				clearAllNodes(); // rebuild tree
 			
@@ -193,6 +200,8 @@ namespace OctreeGeneration {
 			prevVoxelSize = VoxelSize;
 			prevChunkVoxels = ChunkVoxels;
 			prevDensityIsoLevel = DensityIsoLevel;
+			prevDCIterStrength = DCIterStrength;
+			prevDCIterations = DCMaxIterations;
 			
 			if (root == null) {
 				root = createNodeOrGetCached(new OctreeCoord(MaxLod, -1), TerrainNodePrefab, this.transform);
@@ -215,7 +224,6 @@ namespace OctreeGeneration {
 		static readonly Color[] drawColors = new Color[] {
 			Color.blue, Color.cyan, Color.green, Color.red, Color.yellow, Color.magenta, Color.gray,
 		};
-		int _countChunks = 0;
 		int _countNodes = 0;
 		void drawChunk (TerrainNode n) {
 			_countNodes++;
@@ -233,7 +241,6 @@ namespace OctreeGeneration {
 			}
 		}
 		void drawOctree () {
-			_countChunks = 0;
 			_countNodes = 0;
 			if (root != null)
 				drawChunk(root);

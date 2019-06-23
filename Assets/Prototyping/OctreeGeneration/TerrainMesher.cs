@@ -6,6 +6,7 @@ using UnityEngine;
 using Unity.Burst;
 using System.Collections.Generic;
 using UnityEngine.Profiling;
+using System;
 
 namespace OctreeGeneration {
 	
@@ -15,6 +16,9 @@ namespace OctreeGeneration {
 		public void ManualUpdateStartJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
 			
 			var dc = new DualContouring();
+			dc.NormalSmooth = 1;
+			dc.DCIterStrength = octree.DCIterStrength;
+			dc.DCMaxIterations = octree.DCMaxIterations;
 
 			Profiler.BeginSample("StartJob loop");
 			for (int i=0; i<sortedNodes.Count; ++i) {
@@ -36,9 +40,14 @@ namespace OctreeGeneration {
 
 	struct DualContouring {
 		
-		unsafe struct Cell {
+		public float NormalSmooth;
+		public float DCIterStrength;
+		public int DCMaxIterations;
+
+		public unsafe struct Cell {
 			public bool		active;
 			public float3	vertex;
+
 			// ex. Y is the direction the edge is going, 00 01 10 11 are the XZ components, 0 is lower 1 is the higher edge on that axis rel to cell
 			//public int[] = {
 			//			edgeX00, edgeX10, edgeX01, edgeX11,
@@ -50,15 +59,19 @@ namespace OctreeGeneration {
 				active = true;
 				edges[edge] = edgeIndex + 1; // store index in edge list + 1, 0 means edge is inactive
 			}
+
+			public int getEdgeIndex (int i) {
+				return edges[i -1];
+			}
 		}
-		struct Edge {
+		public struct Edge {
 			public int axis;
 			public int3 index; // where the edge is in the grid
 
 			public bool flipFace;
 
 			public float3 pos; // position of approximated iso crossing
-			public float3 gradient; // gradient at approximated iso crossing
+			public float3 normal; // normalized gradient at approximated iso crossing
 
 			public int3 GetCellIndex (int edge) {
 				var cellIndex = index;
@@ -82,23 +95,153 @@ namespace OctreeGeneration {
 			edge.flipFace = signA;
 
 			edge.pos = lerp(posA, posB, t);
-			edge.gradient = lerp(voxA.gradientAnalytic, voxB.gradientAnalytic, t);
+			edge.normal = normalizesafe( lerp(voxA.gradient, voxB.gradient, t) );
 
 			int indx = edges.Count;
 			edges.Add(edge);
 			return indx;
 		}
 
-		void CalcVertex (int3 pos, ref Cell cell) {
-			cell.vertex = (float3)pos + 0.5f;
+		IEnumerable<Edge> getActiveCellEdges (Cell cell) {
+			for (int i=0; i<12; ++i) {
+				var edgeIndex = cell.getEdgeIndex(i);
+				if (edgeIndex > 0) {
+					var edge = edges[edgeIndex -1];
+					yield return edge;
+				}
+			}
+		}
 
-			//for (int axis=0; axis<3; ++axis) {
-			//	for (int a=0; a<4; ++a) {
-			//		for (int b=0; b<4; ++b) {
-			//			cell.edges
-			//		}
-			//	}
-			//}
+		unsafe float3 massPoint (int3 cellPos, ref Cell cell, out float3 normal) {
+			float3 avgPos = 0;
+			float3 avgNormal = 0;
+			int count = 0;
+			
+			foreach (var edge in getActiveCellEdges(cell)) {
+				avgPos += edge.pos;
+				avgNormal += edge.normal;
+				count++;
+			}
+
+			avgPos /= count;
+			avgNormal /= count;
+
+			normal = avgNormal;
+			return avgPos;
+		}
+		
+		unsafe void SurfaceNets (int3 cellPos, ref Cell cell) {
+			cell.vertex = massPoint(cellPos, ref cell, out float3 normal);
+			//cell.normal = normal;
+		}
+		
+		// https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
+		
+		unsafe void DualContourNumeric (int3 cellPos, ref Cell cell) {
+			int res = 10;
+
+			float3 minPos = 0;
+			float minError = float.PositiveInfinity;
+
+			for (int z=0; z<res; ++z) {
+				for (int y=0; y<res; ++y) {
+					for (int x=0; x<res; ++x) {
+						float3 pos = (float3)int3(x,y,z) / res + cellPos;
+
+						float error = 0;
+
+						foreach (var edge in getActiveCellEdges(cell)) {
+
+							var posRel = pos - edge.pos;
+
+							float signedDistance = dot(edge.normal, posRel);
+
+							float sqrError = signedDistance*signedDistance;
+
+							error += sqrError;
+						}
+
+						{
+							var posRel = pos - ((float3)cellPos + 0.5f);
+
+							float sqrError = lengthsq(posRel) * 0.05f;
+
+							error += sqrError;
+						}
+
+						if (error < minError) {
+							minPos = pos;
+							minError = error;
+						}
+					}
+				}
+			}
+
+			cell.vertex = minPos;
+		}
+
+		unsafe void DualContourIterative (int3 cellPos, ref Cell cell, TerrainNode node, int ChunkVoxels) {
+			// Instead of using a QEF solver, use a iterative method
+			// This is my approach of solving this, this is basicly gradient descent which is used in machine learning
+			// We know we want the best fit point based on a set of points with normals (called hermite?) which can be thought of as defining a plane
+			// There should (usually) be a point somewhere (maybe outside the cell) that is the global minimum of distances to these planes
+			// It seems Augusto Schmitz came up with something similar http://www.inf.ufrgs.br/~comba/papers/thesis/diss-leonardo.pdf - called Schimtz Particle Method by mattbick2003 - https://www.reddit.com/r/Unity3D/comments/bw6x1l/an_update_on_the_job_system_dual_contouring/
+			
+			float3 particle = massPoint(cellPos, ref cell, out float3 normal);
+			//cell.normal = normal;
+
+			//float3 particle = (float3)cellPos + 0.5f;
+
+			int iter = 0;
+			while (iter++ < DCMaxIterations) {
+				float3 sumForce = 0;
+				
+				int count = 0;
+				
+				foreach (var edge in getActiveCellEdges(cell)) {
+					var posRel = particle - edge.pos;
+				
+					float signedDistance = dot(edge.normal, posRel);
+					float signedSqrError = signedDistance * abs(signedDistance);
+				
+					float3 force = signedSqrError * -edge.normal;
+				
+					sumForce += force;
+					count++;
+				}
+
+				sumForce /= count;
+				
+				#if false
+				{
+					var posRel = particle - ((float3)cellPos + 0.5f);
+					
+					float dist = length(posRel);
+					float3 dir = dist > 0.001f ? posRel / dist : 0;
+				
+					dist -= 0.45f;
+					dist = max(dist, 0); // only pull perticle to center of cell when its off by a lot
+					
+					float str = dist*dist * 0.05f;
+				
+					sumForce += -dir * str;
+				}
+				#endif
+
+				particle += sumForce * DCIterStrength;
+				
+				particle = clamp(particle, (float3)cellPos, (float3)(cellPos + 1));
+			}
+
+			cell.vertex = particle;
+		}
+
+		unsafe void CalcVertex (int3 cellPos, ref Cell cell, TerrainNode node, int ChunkVoxels) {
+			//SurfaceNets(cellPos, ref cell);
+			//DualContourNumeric(cellPos, ref cell);
+			DualContourIterative(cellPos, ref cell, node, ChunkVoxels);
+
+			cell.vertex = clamp(cell.vertex, (float3)cellPos, (float3)(cellPos + 1));
 		}
 		
 		List<Vector3> vertices;
@@ -107,17 +250,21 @@ namespace OctreeGeneration {
 		List<Color> colors;
 		List<int> triangles;
 
-		void emitTriangle (int3 indxA, int3 indxB, int3 indxC) {
+		void emitTriangle (int3 indxA, int3 indxB, int3 indxC, float cellSize, float3 origin) {
 			var a = cells[indxA.z,indxA.y,indxA.x];
 			var b = cells[indxB.z,indxB.y,indxB.x];
 			var c = cells[indxC.z,indxC.y,indxC.x];
 
-			vertices.Add(a.vertex);
-			vertices.Add(b.vertex);
-			vertices.Add(c.vertex);
+			vertices.Add(a.vertex * cellSize + origin);
+			vertices.Add(b.vertex * cellSize + origin);
+			vertices.Add(c.vertex * cellSize + origin);
 
-			var flatNormal = cross(b.vertex - a.vertex, c.vertex - a.vertex);
+			var flatNormal = normalize(cross(b.vertex - a.vertex, c.vertex - a.vertex));
 			
+			//normals.Add(lerp(flatNormal, a.normal, NormalSmooth));
+			//normals.Add(lerp(flatNormal, b.normal, NormalSmooth));
+			//normals.Add(lerp(flatNormal, c.normal, NormalSmooth));
+
 			normals.Add(flatNormal);
 			normals.Add(flatNormal);
 			normals.Add(flatNormal);
@@ -205,16 +352,26 @@ namespace OctreeGeneration {
 				}
 			}
 			
+			// Pass 2:
+			// Cacluate Vertex location for each cell with QEF algorithm
 			for (int z=0; z<ChunkVoxels; ++z) {
 				for (int y=0; y<ChunkVoxels; ++y) {
 					for (int x=0; x<ChunkVoxels; ++x) {
 						if (cells[z,y,x].active) {
-							CalcVertex(int3(x,y,z), ref cells[z,y,x]);
+							CalcVertex(int3(x,y,z), ref cells[z,y,x], node, ChunkVoxels);
 						}
 					}
 				}
 			}
+			
+			float ChunkSize;
+			node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out ChunkSize);
+			
+			float size = ChunkSize / ChunkVoxels;
+			float3 origin = ChunkSize * -0.5f;
 
+			// Pass 3:
+			// Output the face for each active edge
 			for (int i=0; i<edges.Count; ++i) {
 				var cell0 = edges[i].GetCellIndex(0);
 				var cell1 = edges[i].GetCellIndex(1);
@@ -223,11 +380,11 @@ namespace OctreeGeneration {
 				
 				if (all(cell0 >= 0) && all(cell1 >= 0) & all(cell2 >= 0) & all(cell3 >= 0)) {
 					if (edges[i].flipFace) {
-						emitTriangle(cell0, cell1, cell2);
-						emitTriangle(cell2, cell1, cell3);
+						emitTriangle(cell0, cell1, cell2, size, origin);
+						emitTriangle(cell2, cell1, cell3, size, origin);
 					} else {
-						emitTriangle(cell0, cell2, cell1);
-						emitTriangle(cell1, cell2, cell3);
+						emitTriangle(cell1, cell0, cell3, size, origin);
+						emitTriangle(cell3, cell0, cell2, size, origin);
 					}
 				}
 			}

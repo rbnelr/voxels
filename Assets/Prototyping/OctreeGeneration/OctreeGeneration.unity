@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657898, g: 0.4964133, b: 0.5748178, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657773, g: 0.4964133, b: 0.57481754, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -344,13 +344,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 149123920}
-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+  m_LocalRotation: {x: -0.07338685, y: 0.892539, z: -0.41619775, w: -0.15737861}
   m_LocalPosition: {x: -34.83, y: 24.37, z: 9.29}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 50.000004, y: 200, z: 0}
 --- !u!1 &914998215
 GameObject:
   m_ObjectHideFlags: 0
@@ -383,16 +383,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   VoxelSize: 1
-  ChunkVoxels: 16
-  MaxLod: 5
+  ChunkVoxels: 64
+  MaxLod: 0
   LodFuncStart: 0.5
   LodFuncEnd: 20
   LodFuncEndLod: 5
   DensityIsoLevel: 0
+  DCIterStrength: 2
+  DCMaxIterations: 3
   TerrainNodePrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
     type: 3}
   player: {fileID: 1431956234}
   AlwaysDrawOctree: 0
+  DrawNormals: 0
   CacheSize: 100
 --- !u!4 &914998217
 Transform:
@@ -433,7 +436,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a59a4fe6fdade554b8e47aed43f74528, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MaxJobs: 3
 --- !u!1 &916012521
 GameObject:
   m_ObjectHideFlags: 0
