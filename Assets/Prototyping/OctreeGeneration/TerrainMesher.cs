@@ -187,10 +187,10 @@ namespace OctreeGeneration {
 			// There should (usually) be a point somewhere (maybe outside the cell) that is the global minimum of distances to these planes
 			// It seems Augusto Schmitz came up with something similar http://www.inf.ufrgs.br/~comba/papers/thesis/diss-leonardo.pdf - called Schimtz Particle Method by mattbick2003 - https://www.reddit.com/r/Unity3D/comments/bw6x1l/an_update_on_the_job_system_dual_contouring/
 			
-			float3 particle = massPoint(cellPos, ref cell, out float3 normal);
+			//float3 particle = massPoint(cellPos, ref cell, out float3 normal);
 			//cell.normal = normal;
 
-			//float3 particle = (float3)cellPos + 0.5f;
+			float3 particle = (float3)cellPos + 0.5f;
 
 			int iter = 0;
 			while (iter++ < DCMaxIterations) {
@@ -283,7 +283,6 @@ namespace OctreeGeneration {
 			triangles.Add(indx++);
 		}
 		
-		
 		public void CalcNode (TerrainNode node, float VoxelSize, int ChunkVoxels) {
 			
 			vertices	= new List<Vector3>();
@@ -304,7 +303,7 @@ namespace OctreeGeneration {
 
 			// Pass 1: 
 			// Check the three edges in the negative directions for each cell (this will process each edge)
-			// Cheack each edge for iso level crossings and if any crosses happen, mark the cells it touches as active
+			// Check each edge for iso level crossings and if any crosses happen, mark the cells it touches as active
 			// Aproximate the iso crossing on the active edge by liner mapping iso levels and interpolate the gradient
 			// finally output the active edges to a list and save their indices in the active cell
 			for (int z=0; z<ChunkVoxels; ++z) {
@@ -329,8 +328,8 @@ namespace OctreeGeneration {
 
 						if (edgeX) {
 							var edgeIndex = AddEdge(0, index, signA, voxA, voxB, posA, posB, iso);
-							                    cells[z  , y  , x].SetEdge( 0, edgeIndex);
-							if (         y > 0) cells[z  , y-1, x].SetEdge( 1, edgeIndex);
+							                    cells[z  , y  , x].SetEdge( 0, edgeIndex); // mark active edge for this cell
+							if (         y > 0) cells[z  , y-1, x].SetEdge( 1, edgeIndex); // mark active edge for the cells that edge also neighbours
 							if (z > 0)          cells[z-1, y  , x].SetEdge( 2, edgeIndex);
 							if (z > 0 && y > 0) cells[z-1, y-1, x].SetEdge( 3, edgeIndex);
 						}
@@ -406,5 +405,54 @@ namespace OctreeGeneration {
 
 			node.needsRemesh = false;
 		}
+		
+		public void CalcNodeSeam (TerrainNode node, float VoxelSize, int ChunkVoxels) {
+			
+			vertices	= new List<Vector3>();
+			normals		= new List<Vector3>();
+			uv			= new List<Vector2>();
+			colors		= new List<Color>();
+			triangles	= new List<int>();
+	
+			float iso = 0f;
+			
+			int ArraySize = ChunkVoxels + 1;
+			
+			cells = new Cell[ChunkVoxels, ChunkVoxels, ChunkVoxels]; // assume zeroed
+			edges = new List<Edge>();
+
+			// Three pass algo
+			// Single pass might be possible
+
+			// Pass 1: 
+
+			// loop x, y for z=0 and vice versa for y=0 and x=0
+			{
+				int z=0;
+				for (int y=0; y<ChunkVoxels; ++y) {
+					for (int x=0; x<ChunkVoxels; ++x) {
+
+					}
+				}
+			}
+			{
+				int y=0;
+				for (int z=1; z<ChunkVoxels; ++z) { // z=0 already processed, start at 1
+					for (int x=0; x<ChunkVoxels; ++x) {
+
+					}
+				}
+			}
+			{
+				int x=0;
+				for (int z=1; z<ChunkVoxels; ++z) { // z=0 already processed, start at 1
+					for (int y=1; y<ChunkVoxels; ++y) { // y=0 already processed, start at 1
+
+					}
+				}
+			}
+
+		}
+
 	}
 }
