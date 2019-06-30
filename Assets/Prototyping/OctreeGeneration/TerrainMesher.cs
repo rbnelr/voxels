@@ -495,18 +495,23 @@ namespace OctreeGeneration {
 			bool edge = (voxA.distance < iso) != (voxB.distance < iso);
 
 			if (edge) {
+				if (all(index == 0) && axis == 0) {
+					int a = 5;
+				}
+
 				AddEdge(axis, index, signA, voxA, voxB, posA, posB, iso);
 			}
 		}
 
 		bool GetCellOrNeighbourCell (int3 index, TerrainNode node, Dictionary<int3, TerrainNode> neighbours, int ChunkVoxels, out Cell cell) {
 			var neighbOffs = select(-1, 0, index >= 0);
+			neighbOffs = select(neighbOffs, +1, index >= ChunkVoxels);
 			
 			neighbours.TryGetValue(neighbOffs, out TerrainNode neighb);
 			
 			if (neighb == null || neighb.DCCells == null) {
-				if (any(index < 0) || node.DCCells == null) {
-					cell = default(Cell);
+				if (any(index < 0) || any(index >= ChunkVoxels) || node.DCCells == null) {
+					cell = default;
 					return false;
 				}
 
@@ -526,8 +531,6 @@ namespace OctreeGeneration {
 			pos += nodePos - nodeSize/2;
 			pos -= neighbPos - neighbSize/2;
 			pos /= neighbSize / ChunkVoxels;
-			
-			//int3 offs = -neighbOffs * ChunkVoxels;
 			
 			cell = neighb.DCCells[pos.z, pos.y, pos.x];
 
@@ -560,25 +563,61 @@ namespace OctreeGeneration {
 			
 			cells = new Cell[ChunkVoxels, ChunkVoxels, ChunkVoxels]; // assume zeroed
 			edges = new List<Edge>();
+
+			int CV = ChunkVoxels;
 			
-			for (int y=0; y<ChunkVoxels; ++y) {
-				for (int x=0; x<ChunkVoxels; ++x) {
-					           ProcessEdgeCell(int3(x,y,0), 0, node, ChunkVoxels, iso); // x edges on z plane
-					           ProcessEdgeCell(int3(x,y,0), 1, node, ChunkVoxels, iso); // y edges on z plane
+			bool n100 = neighbours.TryGetValue(int3(1,0,0), out TerrainNode n100_) && n100_.coord.lod == node.coord.lod;
+			bool n010 = neighbours.TryGetValue(int3(0,1,0), out TerrainNode n010_) && n010_.coord.lod == node.coord.lod;
+			bool n001 = neighbours.TryGetValue(int3(0,0,1), out TerrainNode n001_) && n001_.coord.lod == node.coord.lod;
+			
+			for (int z=0; z<CV+1; ++z) {
+				for (int y=0; y<CV+1; ++y) {
+					for (int x=0; x<CV+1; ++x) {
+						// Is this a seam cell at all
+						bool faceX = x == 0 || x == CV;
+						bool faceY = y == 0 || y == CV;
+						bool faceZ = z == 0 || z == CV;
+						
+						if (!faceX && !faceY && !faceZ)
+							continue;
+						
+						// Determine if we own this seam cell
+						if (x == CV && n100) continue;
+						if (y == CV && n010) continue;
+						if (z == CV && n001) continue;
+						
+						// Generate relevant edges for seam face
+						if ((faceY || faceZ) && x < CV) ProcessEdgeCell(int3(x,y,z), 0, node, ChunkVoxels, iso);
+						if ((faceX || faceZ) && y < CV) ProcessEdgeCell(int3(x,y,z), 1, node, ChunkVoxels, iso);
+						if ((faceX || faceY) && z < CV) ProcessEdgeCell(int3(x,y,z), 2, node, ChunkVoxels, iso);
+					}
 				}
 			}
-			for (int z=0; z<ChunkVoxels; ++z) {
-				for (int x=0; x<ChunkVoxels; ++x) {
-					if (z > 0) ProcessEdgeCell(int3(x,0,z), 0, node, ChunkVoxels, iso); // x edges on y plane, x edges on z plane already processed
-					           ProcessEdgeCell(int3(x,0,z), 2, node, ChunkVoxels, iso); // z edges on y plane
-				}
-			}
-			for (int z=0; z<ChunkVoxels; ++z) {
-				for (int y=0; y<ChunkVoxels; ++y) {
-					if (z > 0) ProcessEdgeCell(int3(0,y,z), 1, node, ChunkVoxels, iso); // y edges on x plane, y edges on z plane already processed
-					if (y > 0) ProcessEdgeCell(int3(0,y,z), 2, node, ChunkVoxels, iso); // z edges on x plane, z edges on y plane already processed
-				}
-			}
+
+			//for (int y=0; y<CV+1; ++y) {
+			//	for (int x=0; x<CV+1; ++x) {
+			//		if (         x<CV)        ProcessEdgeCell(int3(x,y, 0), 0, node, ChunkVoxels, iso); // x edges on z- plane
+			//		if (!n100 && x<CV)        ProcessEdgeCell(int3(x,y,CV), 0, node, ChunkVoxels, iso); // x edges on z+ plane
+			//		//if (y<CV)        ProcessEdgeCell(int3(x,y, 0), 1, node, ChunkVoxels, iso); // y edges on z- plane
+			//		//if (y<CV)        ProcessEdgeCell(int3(x,y,CV), 1, node, ChunkVoxels, iso); // y edges on z+ plane
+			//	}
+			//}
+			//for (int z=0; z<CV+1; ++z) {
+			//	for (int x=0; x<CV+1; ++x) {
+			//		if (         x<CV && z>0) ProcessEdgeCell(int3(x, 0,z), 0, node, ChunkVoxels, iso); // x edges on y- plane, x edges on z plane already processed
+			//		if (!n100 && x<CV && z>0) ProcessEdgeCell(int3(x,CV,z), 0, node, ChunkVoxels, iso); // x edges on y+ plane, x edges on z plane already processed
+			//		//if (z<CV)        ProcessEdgeCell(int3(x, 0,z), 2, node, ChunkVoxels, iso); // z edges on y- plane
+			//		//if (z<CV)        ProcessEdgeCell(int3(x,CV,z), 2, node, ChunkVoxels, iso); // z edges on y+ plane
+			//	}
+			//}
+			//for (int z=0; z<CV+1; ++z) {
+			//	for (int y=0; y<CV+1; ++y) {
+			//		//if (y<CV && z>0) ProcessEdgeCell(int3( 0,y,z), 1, node, ChunkVoxels, iso); // y edges on x- plane, y edges on z plane already processed
+			//		//if (y<CV && z>0) ProcessEdgeCell(int3(CV,y,z), 1, node, ChunkVoxels, iso); // y edges on x+ plane, y edges on z plane already processed
+			//		//if (z<CV && y>0) ProcessEdgeCell(int3( 0,y,z), 2, node, ChunkVoxels, iso); // z edges on x- plane, z edges on y plane already processed
+			//		//if (z<CV && y>0) ProcessEdgeCell(int3(CV,y,z), 2, node, ChunkVoxels, iso); // z edges on x+ plane, z edges on y plane already processed
+			//	}
+			//}
 
 			float nodeSize;
 			var nodePos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out nodeSize);
@@ -599,11 +638,11 @@ namespace OctreeGeneration {
 
 				if (cell0B && cell1B && cell2B && cell3B) {
 					if (edges[i].flipFace) {
-						emitTriangle(cell0, cell1, cell2, size, origin, Color.green);
-						emitTriangle(cell2, cell1, cell3, size, origin, Color.blue);
+						emitTriangle(cell0, cell1, cell2, size, origin, Color.white);
+						emitTriangle(cell2, cell1, cell3, size, origin, Color.white);
 					} else {
-						emitTriangle(cell1, cell0, cell3, size, origin, Color.green);
-						emitTriangle(cell3, cell0, cell2, size, origin, Color.blue);
+						emitTriangle(cell1, cell0, cell3, size, origin, Color.white);
+						emitTriangle(cell3, cell0, cell2, size, origin, Color.white);
 					}
 				}
 			}
