@@ -13,9 +13,15 @@ namespace OctreeGeneration {
 	[RequireComponent(typeof(TerrainOctree), typeof(TerrainVoxelizer))]
 	public class TerrainMesher : MonoBehaviour {
 		
+		List<TerrainNode> _sortedNodes;
+		TerrainOctree _octree;
+		
+		DualContouring dc = new DualContouring();
+
 		public void ManualUpdateStartJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
+			_sortedNodes = sortedNodes;
+			_octree = octree;
 			
-			var dc = new DualContouring();
 			dc.NormalSmooth = 1;
 			dc.DCIterStrength = octree.DCIterStrength;
 			dc.DCMaxIterations = octree.DCMaxIterations;
@@ -34,11 +40,64 @@ namespace OctreeGeneration {
 		public void ManualUpdateFinishJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
 			
 		}
-		
-		
+
+		void OnDrawGizmos () {
+			if (_octree == null)
+				return;
+
+			int3[] neighbourDirs = new int3[] {
+				int3(-1,-1,-1),
+				int3( 0,-1,-1),
+				int3(+1,-1,-1),
+				int3(-1, 0,-1),
+				int3( 0, 0,-1),
+				int3(+1, 0,-1),
+				int3(-1,+1,-1),
+				int3( 0,+1,-1),
+				int3(+1,+1,-1),
+				int3(-1,-1, 0),
+				int3( 0,-1, 0),
+				int3(+1,-1, 0),
+				int3(-1, 0, 0),
+							  
+				int3(+1, 0, 0),
+				int3(-1,+1, 0),
+				int3( 0,+1, 0),
+				int3(+1,+1, 0),
+				int3(-1,-1,+1),
+				int3( 0,-1,+1),
+				int3(+1,-1,+1),
+				int3(-1, 0,+1),
+				int3( 0, 0,+1),
+				int3(+1, 0,+1),
+				int3(-1,+1,+1),
+				int3( 0,+1,+1),
+				int3(+1,+1,+1),
+			};
+			var neighbours = new Dictionary<int3, TerrainNode>();
+
+			Profiler.BeginSample("OnDrawGizmos");
+			for (int i=0; i<_sortedNodes.Count; ++i) {
+				var node = _sortedNodes[i];
+				if (node.voxels != null && node.IsLeaf) {
+
+					neighbours.Clear();
+					for (int j=0; j<neighbourDirs.Length; ++j) {
+						var neighb = _octree.GetNeighbourTree(node, neighbourDirs[j]);
+						if (neighb != null) {
+							
+							if (neighb.IsLeaf)
+								neighbours.Add(neighbourDirs[j], neighb);
+						}
+					}
+					dc.CalcNodeSeam(node, neighbours, _octree.VoxelSize, _octree.ChunkVoxels);
+				}
+			}
+			Profiler.EndSample();
+		}
 	}
 
-	struct DualContouring {
+	public struct DualContouring {
 		
 		public float NormalSmooth;
 		public float DCIterStrength;
@@ -187,11 +246,11 @@ namespace OctreeGeneration {
 			// There should (usually) be a point somewhere (maybe outside the cell) that is the global minimum of distances to these planes
 			// It seems Augusto Schmitz came up with something similar http://www.inf.ufrgs.br/~comba/papers/thesis/diss-leonardo.pdf - called Schimtz Particle Method by mattbick2003 - https://www.reddit.com/r/Unity3D/comments/bw6x1l/an_update_on_the_job_system_dual_contouring/
 			
-			//float3 particle = massPoint(cellPos, ref cell, out float3 normal);
+			float3 particle = massPoint(cellPos, ref cell, out float3 normal);
+			//float3 particle = (float3)cellPos + 0.5f;
+
 			//cell.normal = normal;
-
-			float3 particle = (float3)cellPos + 0.5f;
-
+			
 			int iter = 0;
 			while (iter++ < DCMaxIterations) {
 				float3 sumForce = 0;
@@ -250,11 +309,7 @@ namespace OctreeGeneration {
 		List<Color> colors;
 		List<int> triangles;
 
-		void emitTriangle (int3 indxA, int3 indxB, int3 indxC, float cellSize, float3 origin) {
-			var a = cells[indxA.z,indxA.y,indxA.x];
-			var b = cells[indxB.z,indxB.y,indxB.x];
-			var c = cells[indxC.z,indxC.y,indxC.x];
-
+		void emitTriangle (Cell a, Cell b, Cell c, float cellSize, float3 origin, Color col) {
 			vertices.Add(a.vertex * cellSize + origin);
 			vertices.Add(b.vertex * cellSize + origin);
 			vertices.Add(c.vertex * cellSize + origin);
@@ -273,14 +328,22 @@ namespace OctreeGeneration {
 			uv.Add(float2(0.5f));
 			uv.Add(float2(0.5f));
 
-			colors.Add(Color.white);
-			colors.Add(Color.white);
-			colors.Add(Color.white);
+			colors.Add(col);
+			colors.Add(col);
+			colors.Add(col);
 
 			int indx = triangles.Count;
 			triangles.Add(indx++);
 			triangles.Add(indx++);
 			triangles.Add(indx++);
+		}
+
+		void emitTriangle (int3 indxA, int3 indxB, int3 indxC, float cellSize, float3 origin) {
+			var a = cells[indxA.z,indxA.y,indxA.x];
+			var b = cells[indxB.z,indxB.y,indxB.x];
+			var c = cells[indxC.z,indxC.y,indxC.x];
+
+			emitTriangle(a, b, c, cellSize, origin, Color.white);
 		}
 		
 		public void CalcNode (TerrainNode node, float VoxelSize, int ChunkVoxels) {
@@ -296,6 +359,7 @@ namespace OctreeGeneration {
 			int ArraySize = ChunkVoxels + 1;
 			
 			cells = new Cell[ChunkVoxels, ChunkVoxels, ChunkVoxels]; // assume zeroed
+			node.DCCells = cells;
 			edges = new List<Edge>();
 			
 			// Three pass algo
@@ -306,46 +370,57 @@ namespace OctreeGeneration {
 			// Check each edge for iso level crossings and if any crosses happen, mark the cells it touches as active
 			// Aproximate the iso crossing on the active edge by liner mapping iso levels and interpolate the gradient
 			// finally output the active edges to a list and save their indices in the active cell
-			for (int z=0; z<ChunkVoxels; ++z) {
-				for (int y=0; y<ChunkVoxels; ++y) {
-					for (int x=0; x<ChunkVoxels; ++x) {
+			for (int z=0; z<ArraySize; ++z) {
+				for (int y=0; y<ArraySize; ++y) {
+					for (int x=0; x<ArraySize; ++x) {
 						int3 index = int3(x,y,z);
 
 						var posA = index;
 						var posB = index + int3(1,0,0);
 						var posC = index + int3(0,1,0);
 						var posD = index + int3(0,0,1);
+						
+						bool voxBValid = all(posB < ArraySize);
+						bool voxCValid = all(posC < ArraySize);
+						bool voxDValid = all(posD < ArraySize);
+						
+						Voxel voxA;
+						Voxel voxB = default;
+						Voxel voxC = default;
+						Voxel voxD = default;
 
-						var voxA = node.voxels.native[Voxels._3dToFlatIndex(posA, ChunkVoxels)];
-						var voxB = node.voxels.native[Voxels._3dToFlatIndex(posB, ChunkVoxels)];
-						var voxC = node.voxels.native[Voxels._3dToFlatIndex(posC, ChunkVoxels)];
-						var voxD = node.voxels.native[Voxels._3dToFlatIndex(posD, ChunkVoxels)];
+						               voxA = node.voxels.native[Voxels._3dToFlatIndex(posA, ChunkVoxels)];
+						if (voxBValid) voxB = node.voxels.native[Voxels._3dToFlatIndex(posB, ChunkVoxels)];
+						if (voxCValid) voxC = node.voxels.native[Voxels._3dToFlatIndex(posC, ChunkVoxels)];
+						if (voxDValid) voxD = node.voxels.native[Voxels._3dToFlatIndex(posD, ChunkVoxels)];
 
-						bool signA = (voxA.distance < iso);
-						bool edgeX = (voxA.distance < iso) != (voxB.distance < iso);
-						bool edgeY = (voxA.distance < iso) != (voxC.distance < iso);
-						bool edgeZ = (voxA.distance < iso) != (voxD.distance < iso);
+						bool signA =              (voxA.distance < iso);
+						bool edgeX = voxBValid && (voxA.distance < iso) != (voxB.distance < iso);
+						bool edgeY = voxCValid && (voxA.distance < iso) != (voxC.distance < iso);
+						bool edgeZ = voxDValid && (voxA.distance < iso) != (voxD.distance < iso);
+
+						int CV = ChunkVoxels;
 
 						if (edgeX) {
 							var edgeIndex = AddEdge(0, index, signA, voxA, voxB, posA, posB, iso);
-							                    cells[z  , y  , x].SetEdge( 0, edgeIndex); // mark active edge for this cell
-							if (         y > 0) cells[z  , y-1, x].SetEdge( 1, edgeIndex); // mark active edge for the cells that edge also neighbours
-							if (z > 0)          cells[z-1, y  , x].SetEdge( 2, edgeIndex);
-							if (z > 0 && y > 0) cells[z-1, y-1, x].SetEdge( 3, edgeIndex);
+							if (z < CV && y < CV) cells[z  , y  , x].SetEdge( 0, edgeIndex); // mark active edge for this cell
+							if (z < CV && y >  1) cells[z  , y-1, x].SetEdge( 1, edgeIndex); // mark active edge for the cells that edge also neighbours
+							if (z >  1 && y < CV) cells[z-1, y  , x].SetEdge( 2, edgeIndex);
+							if (z >  1 && y >  1) cells[z-1, y-1, x].SetEdge( 3, edgeIndex);
 						}
 						if (edgeY) {
 							var edgeIndex = AddEdge(1, index, !signA, voxA, voxC, posA, posC, iso); // !signA to flip y faces because unity is left handed y up and i usually think right-handed with z up, somewhere my though process caused the y faces to be flipped
-							                    cells[z  , y, x  ].SetEdge( 4, edgeIndex);
-							if (         x > 0) cells[z  , y, x-1].SetEdge( 5, edgeIndex);
-							if (z > 0)          cells[z-1, y, x  ].SetEdge( 6, edgeIndex);
-							if (z > 0 && x > 0) cells[z-1, y, x-1].SetEdge( 7, edgeIndex);
+							if (z < CV && x < CV) cells[z  , y, x  ].SetEdge( 4, edgeIndex);
+							if (z < CV && x >  0) cells[z  , y, x-1].SetEdge( 5, edgeIndex);
+							if (z >  0 && x < CV) cells[z-1, y, x  ].SetEdge( 6, edgeIndex);
+							if (z >  0 && x >  0) cells[z-1, y, x-1].SetEdge( 7, edgeIndex);
 						}
 						if (edgeZ) {
 							var edgeIndex = AddEdge(2, index, signA, voxA, voxD, posA, posD, iso);
-							                    cells[z, y  , x  ].SetEdge( 8, edgeIndex);
-							if (         x > 0) cells[z, y  , x-1].SetEdge( 9, edgeIndex);
-							if (y > 0)          cells[z, y-1, x  ].SetEdge(10, edgeIndex);
-							if (y > 0 && x > 0) cells[z, y-1, x-1].SetEdge(11, edgeIndex);
+							if (y < CV && x < CV) cells[z, y  , x  ].SetEdge( 8, edgeIndex);
+							if (y < CV && x >  0) cells[z, y  , x-1].SetEdge( 9, edgeIndex);
+							if (y >  0 && x < CV) cells[z, y-1, x  ].SetEdge(10, edgeIndex);
+							if (y >  0 && x >  0) cells[z, y-1, x-1].SetEdge(11, edgeIndex);
 						}
 					}
 				}
@@ -377,7 +452,10 @@ namespace OctreeGeneration {
 				var cell2 = edges[i].GetCellIndex(2);
 				var cell3 = edges[i].GetCellIndex(3);
 				
-				if (all(cell0 >= 0) && all(cell1 >= 0) & all(cell2 >= 0) & all(cell3 >= 0)) {
+				if (	all(cell0 >= 0 & cell0 < ChunkVoxels) &&
+						all(cell1 >= 0 & cell1 < ChunkVoxels) &&
+						all(cell2 >= 0 & cell2 < ChunkVoxels) &&
+						all(cell3 >= 0 & cell3 < ChunkVoxels)) {
 					if (edges[i].flipFace) {
 						emitTriangle(cell0, cell1, cell2, size, origin);
 						emitTriangle(cell2, cell1, cell3, size, origin);
@@ -405,9 +483,92 @@ namespace OctreeGeneration {
 
 			node.needsRemesh = false;
 		}
-		
-		public void CalcNodeSeam (TerrainNode node, float VoxelSize, int ChunkVoxels) {
+
+		void ProcessEdgeCell (int3 index, int axis, TerrainNode node, float VoxelSize, int ChunkVoxels, float iso) {
 			
+			float3 nodePos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out float nodeSize);
+
+			var posA = index;
+			var posB = index + int3(1,0,0);
+			var posC = index + int3(0,1,0);
+			var posD = index + int3(0,0,1);
+
+			var voxA = node.voxels.native[Voxels._3dToFlatIndex(posA, ChunkVoxels)];
+			var voxB = node.voxels.native[Voxels._3dToFlatIndex(posB, ChunkVoxels)];
+			var voxC = node.voxels.native[Voxels._3dToFlatIndex(posC, ChunkVoxels)];
+			var voxD = node.voxels.native[Voxels._3dToFlatIndex(posD, ChunkVoxels)];
+
+			bool signA = (voxA.distance < iso);
+			bool edgeX = (voxA.distance < iso) != (voxB.distance < iso);
+			bool edgeY = (voxA.distance < iso) != (voxC.distance < iso);
+			bool edgeZ = (voxA.distance < iso) != (voxD.distance < iso);
+
+			if (edgeX && axis != 0) {
+				Debug.DrawLine((float3)posA * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2,
+							   (float3)posB * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2, Color.red);
+				var edgeIndex = AddEdge(0, index, signA, voxA, voxB, posA, posB, iso);
+			}
+			if (edgeY && axis != 1) {
+				Debug.DrawLine((float3)posA * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2,
+							   (float3)posC * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2, Color.red);
+				var edgeIndex = AddEdge(1, index, !signA, voxA, voxC, posA, posC, iso); // !signA to flip y faces because unity is left handed y up and i usually think right-handed with z up, somewhere my though process caused the y faces to be flipped
+			}
+			if (edgeZ && axis != 2) {
+				Debug.DrawLine((float3)posA * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2,
+							   (float3)posD * (nodeSize / ChunkVoxels) + nodePos - nodeSize/2, Color.red);
+				var edgeIndex = AddEdge(2, index, signA, voxA, voxD, posA, posD, iso);
+			}
+		}
+
+		bool GetCellOrNeighbourCell (int3 index, TerrainNode node, Dictionary<int3, TerrainNode> neighbours, int ChunkVoxels, out Cell cell) {
+			var neighbOffs = select(-1, 0, index >= 0);
+			
+			neighbours.TryGetValue(neighbOffs, out TerrainNode neighb);
+			
+			if (neighb == null || neighb.DCCells == null) {
+				if (any(index < 0) || node.DCCells == null) {
+					cell = default(Cell);
+					return false;
+				}
+
+				cell = node.DCCells[index.z, index.y, index.x];
+				return true;
+			}
+			
+			if (node.coord.lod != neighb.coord.lod) {
+				int a = 5;
+			}
+
+			int3 nodePos   = node  .coord.ToWorldCubeInt(ChunkVoxels, out int nodeSize);
+			int3 neighbPos = neighb.coord.ToWorldCubeInt(ChunkVoxels, out int neighbSize);
+
+			int3 pos = index;
+			pos *= nodeSize / ChunkVoxels;
+			pos += nodePos - nodeSize/2;
+			pos -= neighbPos - neighbSize/2;
+			pos /= neighbSize / ChunkVoxels;
+			
+			//int3 offs = -neighbOffs * ChunkVoxels;
+			
+			cell = neighb.DCCells[pos.z, pos.y, pos.x];
+
+			if (!cell.active) {
+				// TODO: rare speacial case
+				cell = new Cell();
+				//CalcVertex(index, ref cell, node, ChunkVoxels);
+				cell.active = true;
+				cell.vertex = (float3)index + 0.5f;
+			}
+			
+			cell.vertex *= neighbSize / ChunkVoxels;
+			cell.vertex += neighbPos - neighbSize/2;
+			cell.vertex -= nodePos - nodeSize/2;
+			cell.vertex /= nodeSize / ChunkVoxels;
+			return true;
+		}
+
+		public void CalcNodeSeam (TerrainNode node, Dictionary<int3, TerrainNode> neighbours, float VoxelSize, int ChunkVoxels) {
+
 			vertices	= new List<Vector3>();
 			normals		= new List<Vector3>();
 			uv			= new List<Vector2>();
@@ -420,38 +581,62 @@ namespace OctreeGeneration {
 			
 			cells = new Cell[ChunkVoxels, ChunkVoxels, ChunkVoxels]; // assume zeroed
 			edges = new List<Edge>();
+			
+			for (int y=0; y<ChunkVoxels; ++y)
+				for (int x=0; x<ChunkVoxels; ++x)
+					ProcessEdgeCell(int3(x,y,0), 2, node, VoxelSize, ChunkVoxels, iso);
+			
+			for (int z=1; z<ChunkVoxels; ++z)
+				for (int x=0; x<ChunkVoxels; ++x)
+					ProcessEdgeCell(int3(x,0,z), 1, node, VoxelSize, ChunkVoxels, iso);
+			
+			for (int z=1; z<ChunkVoxels; ++z)
+				for (int y=1; y<ChunkVoxels; ++y)
+					ProcessEdgeCell(int3(0,y,z), 0, node, VoxelSize, ChunkVoxels, iso);
+			
 
-			// Three pass algo
-			// Single pass might be possible
+			float nodeSize;
+			var nodePos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out nodeSize);
+			
+			float size = nodeSize / ChunkVoxels;
+			float3 origin = nodeSize * -0.5f;
 
-			// Pass 1: 
 
-			// loop x, y for z=0 and vice versa for y=0 and x=0
-			{
-				int z=0;
-				for (int y=0; y<ChunkVoxels; ++y) {
-					for (int x=0; x<ChunkVoxels; ++x) {
+			for (int i=0; i<edges.Count; ++i) {
+				var cell0Index = edges[i].GetCellIndex(0);
+				var cell1Index = edges[i].GetCellIndex(1);
+				var cell2Index = edges[i].GetCellIndex(2);
+				var cell3Index = edges[i].GetCellIndex(3);
 
+				bool cell0B = GetCellOrNeighbourCell(cell0Index, node, neighbours, ChunkVoxels, out Cell cell0);
+				bool cell1B = GetCellOrNeighbourCell(cell1Index, node, neighbours, ChunkVoxels, out Cell cell1);
+				bool cell2B = GetCellOrNeighbourCell(cell2Index, node, neighbours, ChunkVoxels, out Cell cell2);
+				bool cell3B = GetCellOrNeighbourCell(cell3Index, node, neighbours, ChunkVoxels, out Cell cell3);
+
+				if (cell0B && cell1B && cell2B && cell3B) {
+					if (edges[i].flipFace) {
+						emitTriangle(cell0, cell1, cell2, size, origin, Color.blue);
+						emitTriangle(cell2, cell1, cell3, size, origin, Color.green);
+					} else {
+						emitTriangle(cell1, cell0, cell3, size, origin, Color.blue);
+						emitTriangle(cell3, cell0, cell2, size, origin, Color.green);
 					}
 				}
 			}
-			{
-				int y=0;
-				for (int z=1; z<ChunkVoxels; ++z) { // z=0 already processed, start at 1
-					for (int x=0; x<ChunkVoxels; ++x) {
-
-					}
-				}
+			
+			if (node.seamMesh == null) {
+				node.seamMesh = new Mesh();
+				node.seamMesh.name = "TerrainChunk Seam Mesh";
+				node.seamMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+				node.seamGo.GetComponent<MeshFilter>().mesh = node.seamMesh;
 			}
-			{
-				int x=0;
-				for (int z=1; z<ChunkVoxels; ++z) { // z=0 already processed, start at 1
-					for (int y=1; y<ChunkVoxels; ++y) { // y=0 already processed, start at 1
-
-					}
-				}
-			}
-
+			node.seamMesh.Clear();
+			
+			node.seamMesh.SetVertices(vertices);
+			node.seamMesh.SetNormals(normals);
+			node.seamMesh.SetUVs(0, uv);
+			node.seamMesh.SetColors(colors);
+			node.seamMesh.SetTriangles(triangles, 0);
 		}
 
 	}

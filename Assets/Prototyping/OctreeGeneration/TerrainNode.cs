@@ -25,7 +25,11 @@ namespace OctreeGeneration {
 		}
 		public float3 ToWorldCube (float VoxelSize, int ChunkVoxels, out float size) { // center, size from OctreeCoord
 			size = (ChunkVoxels << lod) * VoxelSize;
-			return ((float3)(index + 1) / 2) * size;
+			return (float3)(index + 1) * size / 2;
+		}
+		public int3 ToWorldCubeInt (int ChunkVoxels, out int size) { // center, size from OctreeCoord
+			size = (ChunkVoxels << lod);
+			return (index + 1) * size / 2;
 		}
 			
 		public override string ToString () {
@@ -68,11 +72,20 @@ namespace OctreeGeneration {
 		public TerrainNode[] Children = null; // Can only have all children or none, this way there are no holes and no overlaps in the world, We disable this node and enable the child nodes when all of them are done with generating their mesh
 
 		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
-		public bool IsLeaf => Children != null;
+		public TerrainNode GetChild (int3 octant) { // [0,1]
+			if (Children == null)
+				return null;
+			return Children[ octant.z * 4 + octant.y * 2 + octant.x ];
+		}
+
+		public bool IsLeaf => Children == null;
 		public bool InTree;
 		
 		public GameObject go;
 		public Mesh mesh = null;
+
+		public GameObject seamGo;
+		public Mesh seamMesh = null;
 
 		public bool IsDestroyed => go == null;
 
@@ -83,20 +96,31 @@ namespace OctreeGeneration {
 
 		public float latestDistToPlayer;
 
+		public DualContouring.Cell[,,] DCCells;
+
 		public TerrainNode (OctreeCoord coord, float3 pos, GameObject TerrainNodePrefab, Transform parent) {
 			this.coord = coord;
 			
 			go = Object.Instantiate(TerrainNodePrefab, pos, Quaternion.identity, parent);
+			seamGo = go.transform.Find("Seam").gameObject;
 		}
 
 		public void Destroy () {
-			Object.Destroy(go);
-			go = null;
 
 			if (mesh != null)
 				Object.Destroy(mesh);
 			mesh = null;
+
+			if (seamMesh != null)
+				Object.Destroy(seamMesh);
+			seamMesh = null;
 			
+			Object.Destroy(seamMesh);
+			seamMesh = null;
+
+			Object.Destroy(go);
+			go = null;
+
 			voxels?.Dispose();
 		}
 		

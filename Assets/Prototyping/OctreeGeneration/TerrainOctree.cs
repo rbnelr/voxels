@@ -221,6 +221,40 @@ namespace OctreeGeneration {
 			TerrainNode.UpdateTreeVisibility(root);
 		}
 
+		TerrainNode _lookupOctree (TerrainNode n, float3 worldPos, int minLod) {
+			if (n.coord.lod < minLod)
+				return null;
+			
+			float3 nodePos = n.coord.ToWorldCube(VoxelSize, ChunkVoxels, out float size);
+			
+			var hs = size/2;
+			var pos = worldPos;
+			pos -= nodePos - hs;
+			pos /= hs;
+			var posChild = (int3)floor(pos);
+			if (all(posChild >= 0 & posChild <= 1)) {
+				
+				var child = n.GetChild(posChild);
+				if (child != null) {
+					var childLookup = _lookupOctree(child, worldPos, minLod);
+					if (childLookup != null)	
+						return childLookup; // in child octant
+				}
+				return n; // in octant that does not have a child
+			} else {
+				return null; // not in this Chunks octants
+			}
+		}
+		public TerrainNode LookupOctree (float3 worldPos, int minLod=-1) { // Octree lookup which smallest Chunk contains the world space postion
+			if (root == null) return null;
+			return _lookupOctree(root, worldPos, minLod);
+		}
+		public TerrainNode GetNeighbourTree (TerrainNode n, int3 dir) {
+			float3 pos = n.coord.ToWorldCube(VoxelSize, ChunkVoxels, out float size);
+			var posInNeighbour = pos + (float3)dir * (size + VoxelSize)/2;
+			return LookupOctree(posInNeighbour, n.coord.lod);
+		}
+
 		static readonly Color[] drawColors = new Color[] {
 			Color.blue, Color.cyan, Color.green, Color.red, Color.yellow, Color.magenta, Color.gray,
 		};
