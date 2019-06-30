@@ -383,10 +383,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   VoxelSize: 1
-  ChunkVoxels: 32
-  MaxLod: 5
+  ChunkVoxels: 16
+  MaxLod: 2
   LodFuncStart: 0.5
-  LodFuncEnd: 20
+  LodFuncEnd: 5
   LodFuncEndLod: 5
   DensityIsoLevel: 0
   DCIterStrength: 2
@@ -705,7 +705,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1431956234}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 23.08, y: 0, z: -13.36}
   m_LocalScale: {x: 0.8, y: 1.4, z: 0.6}
   m_Children:
   - {fileID: 916012524}

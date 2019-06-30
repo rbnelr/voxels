@@ -93,6 +93,7 @@ namespace OctreeGeneration {
 		
 		public bool needsVoxelize = true;
 		public bool needsRemesh = true;
+		public bool needsSeamRemesh = true;
 
 		public float latestDistToPlayer;
 
