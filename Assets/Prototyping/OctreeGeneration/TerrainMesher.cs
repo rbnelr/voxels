@@ -638,11 +638,11 @@ namespace OctreeGeneration {
 
 				if (cell0B && cell1B && cell2B && cell3B) {
 					if (edges[i].flipFace) {
-						emitTriangle(cell0, cell1, cell2, size, origin, Color.white);
-						emitTriangle(cell2, cell1, cell3, size, origin, Color.white);
+						emitTriangle(cell0, cell1, cell2, size, origin, Color.green);
+						emitTriangle(cell2, cell1, cell3, size, origin, Color.blue);
 					} else {
-						emitTriangle(cell1, cell0, cell3, size, origin, Color.white);
-						emitTriangle(cell3, cell0, cell2, size, origin, Color.white);
+						emitTriangle(cell1, cell0, cell3, size, origin, Color.green);
+						emitTriangle(cell3, cell0, cell2, size, origin, Color.blue);
 					}
 				}
 			}

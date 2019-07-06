@@ -79,7 +79,6 @@
     <Compile Include="Assets\Prototyping\GeneratorTesting\Visualizer.cs" />
     <Compile Include="Assets\Prototyping\MeshExt.cs" />
     <Compile Include="Assets\Prototyping\NoiseExt.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\MarchingCubes.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\NoiseBugRepro.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainMesher.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainNode.cs" />

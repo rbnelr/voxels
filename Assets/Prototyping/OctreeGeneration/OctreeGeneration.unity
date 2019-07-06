@@ -384,9 +384,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   VoxelSize: 1
   ChunkVoxels: 32
-  MaxLod: 6
-  LodFuncStart: 0.5
-  LodFuncEnd: 16
+  MaxLod: 4
+  LodFuncStart: 0.7
+  LodFuncEnd: 14
   LodFuncEndLod: 6
   DensityIsoLevel: 0
   DCIterStrength: 3
@@ -394,7 +394,7 @@ MonoBehaviour:
   TerrainNodePrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
     type: 3}
   player: {fileID: 1431956234}
-  AlwaysDrawOctree: 1
+  AlwaysDrawOctree: 0
   DrawNormals: 0
   CacheSize: 100
 --- !u!4 &914998217
