@@ -29,10 +29,10 @@ namespace OctreeGeneration {
 		public NativeArray<Voxel>	native;
 		public int refCount = 0;
 
-		public void Use () {
+		public void IncRef () {
 			refCount++;
 		}
-		public void Dispose () {
+		public void DecRef () {
 			refCount--;
 			if (refCount == 0)
 				native.Dispose();
@@ -189,50 +189,33 @@ namespace OctreeGeneration {
 		[BurstCompile]
 		struct Job : IJobParallelFor {
 			[ReadOnly] public float3 ChunkPos;
-			[ReadOnly] public float ChunkSize;
-			[ReadOnly] public int ChunkVoxels;
+			[ReadOnly] public float NodeSize;
+			[ReadOnly] public int NodeVoxels;
 			[ReadOnly] public TerrainGenerator Gen;
 		
 			[WriteOnly] public NativeArray<Voxel> voxels;
 
 			public void Execute (int i) {
 				int voxelIndex = i;
-				int3 voxelCoord = Voxels.flatTo3dIndex(i, ChunkVoxels);
+				int3 voxelCoord = Voxels.flatTo3dIndex(i, NodeVoxels);
 
 				float3 pos_world = (float3)voxelCoord;
-				pos_world *= ChunkSize / ChunkVoxels;
-				pos_world += ChunkPos - ChunkSize * 0.5f;
+				pos_world *= NodeSize / NodeVoxels;
+				pos_world += ChunkPos;
 						
 				voxels[voxelIndex] = Gen.Generate(pos_world);
 			}
 		}
 
-		public class RunningJob {
+		class RunningJob {
 			public Voxels voxels;
 			public TerrainNode node;
 			public JobHandle JobHandle;
 		}
 		
-		public class TerrainNodeCache : KeyedCollection<OctreeCoord, TerrainNode> {
-			public delegate void NodeDeleter (TerrainNode n);
-		
-			public void MakeRoomForOne (int CacheSize, NodeDeleter onDelete) {
-				if (CacheSize == 0)
-					return;
-				while (Count > 0 && Count >= CacheSize) { // uncache until we have Room for one 
-					onDelete(this[0]);
-					RemoveAt(0); // Remove oldest chached Voxel
-				}
-			}
-
-			protected override OctreeCoord GetKeyForItem (TerrainNode item) {
-				return item.coord;
-			}
-		}
-		
 		List<RunningJob> runningJobs = new List<RunningJob>();
 		
-		public TerrainGenerator terrainGenerator;
+		TerrainGenerator terrainGenerator = new TerrainGenerator();
 		public int MaxJobs = 3;
 		
 		public void ManualUpdate (List<TerrainNode> sortedNodes, TerrainOctree octree) {
@@ -242,10 +225,10 @@ namespace OctreeGeneration {
 				var node = sortedNodes[i];
 				
 				if (	node.needsVoxelize && // A voxelize was flagged
-						runningJobs.Find(x => x.node.coord == node.coord) == null && // not running yet
+						runningJobs.Find(x => x.node == node) == null && // not running yet
 						runningJobs.Count < MaxJobs // not too many jobs yet
 						) {
-					StartJob(node, octree.VoxelSize, octree.ChunkVoxels, terrainGenerator);
+					StartJob(node, octree);
 				}
 			}
 			Profiler.EndSample();
@@ -264,26 +247,27 @@ namespace OctreeGeneration {
 			Profiler.EndSample();
 		}
 
-		void StartJob (TerrainNode node, float VoxelSize, int ChunkVoxels, TerrainGenerator gen) {
+		void StartJob (TerrainNode node, TerrainOctree octree) {
 			Profiler.BeginSample("StartJob");
 
-			int ArraySize = ChunkVoxels + 1;
+			int ArraySize = octree.ChunkVoxels + 1;
 			int voxelsLength = ArraySize * ArraySize * ArraySize;
 			
 			Profiler.BeginSample("new NativeArray");
 			var voxels = new Voxels() { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
-			voxels.Use();
+			voxels.IncRef();
 			Profiler.EndSample();
 			
 			var runningJob = new RunningJob { node = node, voxels = voxels };
 
 			Profiler.BeginSample("new Job");
 			var job = new Job {
-				ChunkVoxels = ChunkVoxels,
-				Gen = gen,
+				NodeVoxels = octree.ChunkVoxels,
+				Gen = terrainGenerator,
 				voxels = runningJob.voxels.native
 			};
-			job.ChunkPos = node.coord.ToWorldCube(VoxelSize, ChunkVoxels, out job.ChunkSize);
+			job.ChunkPos = node.pos;
+			job.NodeSize = node.size;
 			Profiler.EndSample();
 			
 			Profiler.BeginSample("job.Schedule");
@@ -298,8 +282,9 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("FinishJob");
 			job.JobHandle.Complete();
 
-			job.node.AssignVoxels(job.voxels);
-			job.voxels.Dispose();
+			if (!job.node.IsDestroyed)
+				job.node.AssignVoxels(job.voxels);
+			job.voxels.DecRef();
 			Profiler.EndSample();
 		}
 
@@ -307,7 +292,7 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("OnDestroy");
 			foreach (var job in runningJobs) {
 				job.JobHandle.Complete(); // block main thread
-				job.voxels.Dispose();
+				job.voxels.DecRef();
 			}
 			runningJobs.Clear();
 			Profiler.EndSample();
@@ -315,6 +300,19 @@ namespace OctreeGeneration {
 
 		void OnDestroy () {
 			Dispose();
+		}
+		
+		void OnGUI () {
+			GUI.Label(new Rect(0, 40, 500,30), "Voxelizer Jobs: ");
+
+			for (int i=0; i<runningJobs.Count; ++i) {
+				var job = runningJobs[i];
+				int3 name = (int3)floor(job.node.pos / job.node.size);
+
+				GUI.color = TerrainOctree.drawColors[clamp(job.node.lod % TerrainOctree.drawColors.Length, 0, TerrainOctree.drawColors.Length-1)];
+
+				GUI.Label(new Rect(100 + i*100, 40, 100,30), name.ToString());
+			}
 		}
 	}
 }

@@ -13,6 +13,7 @@ namespace OctreeGeneration {
 	[RequireComponent(typeof(TerrainOctree), typeof(TerrainVoxelizer))]
 	public class TerrainMesher : MonoBehaviour {
 		
+		#if false
 		List<TerrainNode> _sortedNodes;
 		TerrainOctree _octree;
 		
@@ -88,10 +89,13 @@ namespace OctreeGeneration {
 		public void ManualUpdateFinishJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
 			
 		}
+
+		#endif
 	}
 
 	public struct DualContouring {
 		
+		#if false
 		public float NormalSmooth;
 		public float DCIterStrength;
 		public int DCMaxIterations;
@@ -663,6 +667,7 @@ namespace OctreeGeneration {
 
 			node.needsSeamRemesh = false;
 		}
+		#endif
 
 	}
 }

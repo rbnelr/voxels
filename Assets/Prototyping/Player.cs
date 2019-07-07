@@ -15,6 +15,8 @@ namespace Prototyping {
 		public float2 test = float2(0,0);
 		public float2 MouselookAng = float2(0,0);
 
+		public float testFallSpeed = -50f;
+
 		Camera cam;
 	
 		void Awake () {
@@ -56,6 +58,8 @@ namespace Prototyping {
 			moveVec = transform.TransformVector(moveVec);
 
 			transform.localPosition += (Vector3)moveVec;
+
+			//transform.localPosition += (Vector3)float3(0, testFallSpeed, 0) * Time.deltaTime;
 		}
 	}
 }

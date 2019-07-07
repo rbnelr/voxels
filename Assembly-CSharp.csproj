@@ -82,7 +82,6 @@
     <Compile Include="Assets\Prototyping\OctreeGeneration\NoiseBugRepro.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainMesher.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainNode.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainNodeDebug.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainOctree.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainVoxelizer.cs" />
     <Compile Include="Assets\Prototyping\OctreeGeneration\Visualizer.cs" />

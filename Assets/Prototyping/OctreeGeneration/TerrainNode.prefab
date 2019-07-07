@@ -11,7 +11,6 @@ GameObject:
   - component: {fileID: 4541685984245000}
   - component: {fileID: 33697836235368506}
   - component: {fileID: 23371838128772306}
-  - component: {fileID: 1968706663763928503}
   m_Layer: 0
   m_Name: TerrainNode
   m_TagString: Untagged
@@ -80,19 +79,6 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
---- !u!114 &1968706663763928503
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1667098945258162}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: df8fae11b2537654fb8101416c710269, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  octree: {fileID: 0}
 --- !u!1 &8763983982338159649
 GameObject:
   m_ObjectHideFlags: 0
