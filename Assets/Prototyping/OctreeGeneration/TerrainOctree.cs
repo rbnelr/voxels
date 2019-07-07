@@ -12,7 +12,7 @@ namespace OctreeGeneration {
 	public class TerrainOctree : MonoBehaviour {
 		
 		public float VoxelSize = 1;
-		public int ChunkVoxels = 32;
+		public int NodeVoxels = 32;
 		[Range(0, 15)]
 		public int MaxLod = 5;
 
@@ -21,7 +21,7 @@ namespace OctreeGeneration {
 		public float LodFuncEndLod = 6f;
 		
 		float prevVoxelSize;
-		int prevChunkVoxels;
+		int prevNodeVoxels;
 		int prevMaxLod;
 		
 		public GameObject TerrainNodePrefab;
@@ -48,9 +48,9 @@ namespace OctreeGeneration {
 			sortedNodes.Remove(n); // SLOW: O(N), can't use RemoveAtSwapBack because that need the index, which do not have, and to have it would require keeping track of it during sorting, which the standart sorting algo does not allow
 		}
 
-		public float CalcDistToPlayer (float3 nodePos, float chunkSize) {
+		public float CalcDistToPlayer (float3 nodePos, float nodeSize) {
 			float3 posRel = playerPos - nodePos;
-			var closest = clamp(posRel, 0, chunkSize);
+			var closest = clamp(posRel, 0, nodeSize);
 			return length(posRel - closest);
 		}
 		int calcLod (float dist) {
@@ -61,8 +61,8 @@ namespace OctreeGeneration {
 			float a = -l / ( Mathf.Log(m) - Mathf.Log(n) );
 			float b = (l * Mathf.Log(m)) / ( Mathf.Log(m) - Mathf.Log(n) );
 		
-			float Lod0ChunkSize = VoxelSize * ChunkVoxels;
-			var lod = max(Mathf.FloorToInt( a * Mathf.Log(dist / Lod0ChunkSize) + b ), 0);
+			float Lod0NodeSize = VoxelSize * NodeVoxels;
+			var lod = max(Mathf.FloorToInt( a * Mathf.Log(dist / Lod0NodeSize) + b ), 0);
 			return lod;
 		}
 		
@@ -119,8 +119,8 @@ namespace OctreeGeneration {
 			mesher = GetComponent<TerrainMesher>();
 		}
 
-		void Update () { // Updates the Octree by creating and deleting TerrainChunks of different sizes (LOD)
-			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || ChunkVoxels != prevChunkVoxels) {
+		void Update () { // Updates the Octree by creating and deleting TerrainNodes of different sizes (LOD)
+			if (MaxLod != prevMaxLod || VoxelSize != prevVoxelSize || NodeVoxels != prevNodeVoxels) {
 				if (root != null)
 					destroyNode(root); // rebuild tree
 				root = null;
@@ -128,9 +128,9 @@ namespace OctreeGeneration {
 			
 			prevMaxLod = MaxLod;
 			prevVoxelSize = VoxelSize;
-			prevChunkVoxels = ChunkVoxels;
+			prevNodeVoxels = NodeVoxels;
 			
-			float rootSize = (1 << MaxLod) * ChunkVoxels * VoxelSize;
+			float rootSize = (1 << MaxLod) * NodeVoxels * VoxelSize;
 			float3 rootPos = -rootSize / 2;
 
 			rootPos = (floor(playerPos / (rootSize / 2) + 0.5f) - 1f) * (rootSize / 2); // snap root node in a grid half its size so that is contains the player
@@ -178,6 +178,11 @@ namespace OctreeGeneration {
 			resortNodeList();
 
 			voxelizer.ManualUpdate(sortedNodes, this);
+
+			mesher.ManualUpdateStartJobs(sortedNodes, this);
+		}
+		void LateUpdate () {
+			mesher.ManualUpdateFinishJobs(sortedNodes, this);
 		}
 
 		void OnDestroy () {
@@ -190,7 +195,7 @@ namespace OctreeGeneration {
 		//	if (n.coord.lod < minLod)
 		//		return null;
 		//	
-		//	float3 nodePos = n.coord.ToWorldCube(VoxelSize, ChunkVoxels, out float size);
+		//	float3 nodePos = n.coord.ToWorldCube(VoxelSize, NodeVoxels, out float size);
 		//	
 		//	var hs = size/2;
 		//	var pos = worldPos;
@@ -207,15 +212,15 @@ namespace OctreeGeneration {
 		//		}
 		//		return n; // in octant that does not have a child
 		//	} else {
-		//		return null; // not in this Chunks octants
+		//		return null; // not in this Nodes octants
 		//	}
 		//}
-		//public TerrainNode LookupOctree (float3 worldPos, int minLod=-1) { // Octree lookup which smallest Chunk contains the world space postion
+		//public TerrainNode LookupOctree (float3 worldPos, int minLod=-1) { // Octree lookup which smallest Node contains the world space postion
 		//	if (root == null) return null;
 		//	return _lookupOctree(root, worldPos, minLod);
 		//}
 		//public TerrainNode GetNeighbourTree (TerrainNode n, int3 dir) {
-		//	float3 pos = n.coord.ToWorldCube(VoxelSize, ChunkVoxels, out float size);
+		//	float3 pos = n.coord.ToWorldCube(VoxelSize, NodeVoxels, out float size);
 		//	var posInNeighbour = pos + (float3)dir * (size + VoxelSize)/2;
 		//	return LookupOctree(posInNeighbour, n.coord.lod);
 		//}
@@ -230,8 +235,8 @@ namespace OctreeGeneration {
 			Gizmos.color = drawColors[clamp(n.lod % drawColors.Length, 0, drawColors.Length-1)];
 			Gizmos.DrawWireCube(n.pos + n.size/2, (float3)n.size);
 			
-			if (n.voxels != null)
-				Gizmos.DrawWireCube(n.pos + n.size/2, (float3)n.size * 0.96f);
+			//if (n.voxels != null)
+			//	Gizmos.DrawWireCube(n.pos + n.size/2, (float3)n.size * 0.96f);
 			
 			for (int i=0; i<8; ++i) {
 				if (n.Children[i] != null)
@@ -254,7 +259,7 @@ namespace OctreeGeneration {
 		}
 		
 		void OnGUI () {
-			float rootSize = (1 << MaxLod) * ChunkVoxels * VoxelSize;
+			float rootSize = (1 << MaxLod) * NodeVoxels * VoxelSize;
 			
 			GUI.Label(new Rect(0, 0, 500,30), "Terrain Nodes: "+ _countNodes);
 			GUI.Label(new Rect(0, 20, 500,30), "Root Node Size: "+ rootSize);

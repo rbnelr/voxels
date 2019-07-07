@@ -6,6 +6,22 @@ using System.Collections.Generic;
 using UnityEngine.Profiling;
 
 namespace OctreeGeneration {
+	public static class VoxelUtil {
+		public static int _3dToFlatIndex (int3 _3dIndex, int3 arrSize) {
+			return _3dIndex.z * arrSize.y * arrSize.x + _3dIndex.y * arrSize.x + _3dIndex.x;
+		}
+		public static int3 flatTo3dIndex (int flatIndex, int3 arrSize) {
+			int3 _3dIndex;
+			_3dIndex.x = flatIndex % arrSize.x;
+			flatIndex /= arrSize.x;
+			_3dIndex.y = flatIndex % arrSize.y;
+			flatIndex /= arrSize.y;
+			_3dIndex.z = flatIndex;
+
+			return _3dIndex;
+		}
+	}
+
 	public class TerrainNode {
 		 // TerrainNode has a fixed location after it is created
 		public readonly int lod;
@@ -88,12 +104,12 @@ namespace OctreeGeneration {
 
 			if (mesh == null) {
 				mesh = new Mesh();
-				mesh.name = "TerrainChunk Mesh";
+				mesh.name = "TerrainNode Mesh";
 				mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 				go.GetComponent<MeshFilter>().mesh = mesh;
 			}
 
-			Profiler.BeginSample("TerrainChunk.AssignMesh");
+			Profiler.BeginSample("TerrainNode.AssignMesh");
 			mesh.Clear();
 				Profiler.BeginSample("vertices");
 					mesh.SetVerticesNative(vertices, ref verticesBuf);
