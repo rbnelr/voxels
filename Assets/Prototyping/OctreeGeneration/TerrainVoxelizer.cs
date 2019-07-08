@@ -97,11 +97,11 @@ namespace OctreeGeneration {
 			return fsnoise(pos, 600, 3);
 		}
 		public Voxel Generate (float3 pos) {
-			//float3 normal = float3(1, 7, 2);
-			//return new Voxel {
-			//	distance = dot(pos, normal),
-			//	gradient = normal,
-			//};
+			float3 normal = float3(1, 7, 2);
+			return new Voxel {
+				distance = dot(pos, normal),
+				gradient = normal,
+			};
 			
 			pos *= 12f; // for testing
 

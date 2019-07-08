@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using UnityEngine.Profiling;
 using System;
 using static OctreeGeneration.VoxelUtil;
+using System.Threading;
 
 namespace OctreeGeneration {
 	
@@ -35,7 +36,7 @@ namespace OctreeGeneration {
 			int3(-1,+1,+1), int3( 0,+1,+1), int3(+1,+1,+1),
 		};
 		Dictionary<int3, TerrainNode> neighbours = new Dictionary<int3, TerrainNode>();
-
+		
 		void FlagSeamRemesh (TerrainNode n) { // TODO: This flags too many nodes, because only some of them actually neighbour the node that caused the flagging
 			n.needsSeamRemesh = true;
 			if (n.Children != null) {
@@ -62,7 +63,7 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("StartJob loop");
 			for (int i=0; i<sortedNodes.Count; ++i) {
 				var node = sortedNodes[i];
-				
+
 				bool remesh =	node.needsRemesh && // remesh was flagged
 								node.voxels != null; // we have voxels yet (if these voxels are up to date or if there if already a voxelize job is handled by the octree)
 				//bool seamRemesh = node.needsSeamRemesh &&
@@ -72,7 +73,13 @@ namespace OctreeGeneration {
 						runningJobs.Find(x => x.node == node) == null && // not running yet
 						runningJobs.Count < MaxJobs // not too many jobs yet
 						) {
-					runningJobs.Add( RunningNodeCalcJob.Start(node, octree.VoxelSize, octree.NodeVoxels, DCIterStrength, DCMaxIterations) );
+
+					int childrenMask = 0;
+					for (int j=0; j<8; ++j)
+						if (node.Children[j] != null && node.Children[j].mesh != null)
+							childrenMask |= 1 << j;
+					
+					runningJobs.Add( RunningNodeCalcJob.Start(node, childrenMask, octree.VoxelSize, octree.NodeVoxels, DCIterStrength, DCMaxIterations) );
 				}
 				
 				//if (seamRemesh) {
@@ -161,6 +168,7 @@ namespace OctreeGeneration {
 		
 		[BurstCompile]
 		struct CalcNodeJob : IJob {
+			[ReadOnly] public int childrenMask;
 			[ReadOnly] public float NodeSize;
 			[ReadOnly] public int NodeVoxels;
 			[ReadOnly] public float iso;
@@ -209,6 +217,9 @@ namespace OctreeGeneration {
 				int ArraySize = NodeVoxels + 1;
 
 				int3 index = int3(x,y,z);
+
+				if ((childrenMask & (1 <<_3dToFlatIndex(index / (NodeVoxels/2), 2))) != 0)
+					return;
 
 				var posA = index;
 				var posB = index + int3(1,0,0);
@@ -379,6 +390,8 @@ namespace OctreeGeneration {
 						}
 					}
 				}
+
+				//int dbgCount = 0;
 				
 				// Calculate vertices positions
 				for (int z=0; z<NodeVoxels; ++z) {
@@ -397,10 +410,15 @@ namespace OctreeGeneration {
 
 								cell.vertex = vertex;
 								Cells[i] = cell;
+
+								//dbgCount++;
 							}
 						}
 					}
 				}
+
+				//if (dbgCount > 0)
+				//	Thread.Sleep(500);
 				
 				float size = NodeSize / NodeVoxels;
 
@@ -432,7 +450,7 @@ namespace OctreeGeneration {
 			public JobHandle JobHandle;
 			public CalcNodeJob job;
 
-			public static RunningNodeCalcJob Start (TerrainNode node, float VoxelSize, int NodeVoxels, float DCIterStrength, int DCMaxIterations) {
+			public static RunningNodeCalcJob Start (TerrainNode node, int childrenMask, float VoxelSize, int NodeVoxels, float DCIterStrength, int DCMaxIterations) {
 				int ArraySize = NodeVoxels + 1;
 				
 				int edgeAlloc = ArraySize * ArraySize * 4;
@@ -443,6 +461,7 @@ namespace OctreeGeneration {
 				var job = new RunningNodeCalcJob { node = node };
 
 				job.job = new CalcNodeJob {
+					childrenMask = childrenMask,
 					NodeSize = node.size,
 					NodeVoxels = NodeVoxels,
 					iso = 0.0f,

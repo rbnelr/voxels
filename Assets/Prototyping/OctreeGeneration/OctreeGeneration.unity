@@ -384,7 +384,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   VoxelSize: 1
   NodeVoxels: 32
-  MaxLod: 5
+  MaxLod: 4
   LodFuncStart: 0.7
   LodFuncEnd: 14
   LodFuncEndLod: 6
@@ -433,7 +433,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   DCIterStrength: 1
   DCMaxIterations: 5
-  MaxJobs: 3
+  MaxJobs: 1
 --- !u!1 &916012521
 GameObject:
   m_ObjectHideFlags: 0
@@ -649,7 +649,8 @@ MonoBehaviour:
   MouselookAng:
     x: 0
     y: 0
-  testFallSpeed: -50
+  TestFall: 0
+  TestFallSpeed: -50
 --- !u!23 &1431956236
 MeshRenderer:
   m_ObjectHideFlags: 0

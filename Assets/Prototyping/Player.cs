@@ -15,7 +15,8 @@ namespace Prototyping {
 		public float2 test = float2(0,0);
 		public float2 MouselookAng = float2(0,0);
 
-		public float testFallSpeed = -50f;
+		public bool TestFall = false;
+		public float TestFallSpeed = -50f;
 
 		Camera cam;
 	
@@ -59,7 +60,8 @@ namespace Prototyping {
 
 			transform.localPosition += (Vector3)moveVec;
 
-			//transform.localPosition += (Vector3)float3(0, testFallSpeed, 0) * Time.deltaTime;
+			if (TestFall)
+				transform.localPosition += (Vector3)float3(0, TestFallSpeed, 0) * Time.deltaTime;
 		}
 	}
 }

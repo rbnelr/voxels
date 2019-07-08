@@ -34,9 +34,13 @@ namespace OctreeGeneration {
 		public TerrainNode root = null; // Tree of visible TerrainNodes
 		public List<TerrainNode> sortedNodes = new List<TerrainNode>();
 		
-		TerrainNode createNode (int lod, float3 pos, float size) {
-			var n = new TerrainNode(lod, pos, size, TerrainNodePrefab, this.transform);
+		TerrainNode createNode (int lod, float3 pos, float size, TerrainNode parent=null) {
+			var n = new TerrainNode(lod, pos, size, TerrainNodePrefab, this.transform, parent);
 			sortedNodes.Add(n);
+			
+			if (n.Parent != null)
+				n.Parent.needsRemesh = true;
+
 			return n;
 		}
 		void destroyNode (TerrainNode n) {
@@ -46,6 +50,9 @@ namespace OctreeGeneration {
 
 			n.Destroy();
 			sortedNodes.Remove(n); // SLOW: O(N), can't use RemoveAtSwapBack because that need the index, which do not have, and to have it would require keeping track of it during sorting, which the standart sorting algo does not allow
+			
+			if (n.mesh != null && n.Parent != null)
+				n.Parent.needsRemesh = true;
 		}
 
 		public float CalcDistToPlayer (float3 nodePos, float nodeSize) {
@@ -68,7 +75,7 @@ namespace OctreeGeneration {
 		
 		void updateTree (TerrainNode node) {
 			Debug.Assert(node != null && !node.IsDestroyed);
-
+			
 			for (int i=0; i<8; ++i) {
 				int3 childIndx = TerrainNode.ChildOrder[i];
 				var child = node.Children[i];
@@ -83,7 +90,7 @@ namespace OctreeGeneration {
 				bool wantChild = desiredLod <= childLod;
 
 				if (wantChild && child == null) {
-					child = createNode(childLod, childPos, childSize);
+					child = createNode(childLod, childPos, childSize, node);
 				}
 				if (!wantChild && child != null) {
 					destroyNode(child);
@@ -104,7 +111,7 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("resortNodeList()");
 			sortedNodes.Sort( (l, r) => {
 				//int order =				-l.InTree				.CompareTo(r.InTree);
-				int             order =	 l.lod			        .CompareTo(r.lod);
+				int             order =	 (l.lod			        .CompareTo(r.lod));
 				if (order == 0) order =	 l.latestDistToPlayer	.CompareTo(r.latestDistToPlayer);
 				return order;
 			});
@@ -177,9 +184,9 @@ namespace OctreeGeneration {
 
 			resortNodeList();
 
-			voxelizer.ManualUpdate(sortedNodes, this);
-
 			mesher.ManualUpdateStartJobs(sortedNodes, this);
+
+			voxelizer.ManualUpdate(sortedNodes, this);
 		}
 		void LateUpdate () {
 			mesher.ManualUpdateFinishJobs(sortedNodes, this);
