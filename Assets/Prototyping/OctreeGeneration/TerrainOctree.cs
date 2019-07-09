@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using Unity.Mathematics;
+using System.Linq;
 using static Unity.Mathematics.math;
 using Unity.Collections;
 using System.Collections.Generic;
@@ -32,27 +33,17 @@ namespace OctreeGeneration {
 		float3 playerPos { get { return player.transform.position; } }
 		
 		public TerrainNode root = null; // Tree of visible TerrainNodes
-		public List<TerrainNode> sortedNodes = new List<TerrainNode>();
 		
-		TerrainNode createNode (int lod, float3 pos, float size, TerrainNode parent=null) {
-			var n = new TerrainNode(lod, pos, size, TerrainNodePrefab, this.transform, parent);
-			sortedNodes.Add(n);
-			
-			if (n.Parent != null)
-				n.Parent.needsRemesh = true;
-
+		TerrainNode createNode (int lod, float3 pos, float size) {
+			var n = new TerrainNode(lod, pos, size, TerrainNodePrefab, this.transform);
 			return n;
 		}
-		void destroyNode (TerrainNode n) {
+		static void destroyNode (TerrainNode n) {
 			for (int i=0; i<8; ++i)
 				if (n.Children[i] != null)
 					destroyNode(n.Children[i]);
 
 			n.Destroy();
-			sortedNodes.Remove(n); // SLOW: O(N), can't use RemoveAtSwapBack because that need the index, which do not have, and to have it would require keeping track of it during sorting, which the standart sorting algo does not allow
-			
-			if (n.mesh != null && n.Parent != null)
-				n.Parent.needsRemesh = true;
 		}
 
 		public float CalcDistToPlayer (float3 nodePos, float nodeSize) {
@@ -89,33 +80,130 @@ namespace OctreeGeneration {
 				
 				bool wantChild = desiredLod <= childLod;
 
+				//if (wantChild && child == null) {
+				//	child = createNode(childLod, childPos, childSize, node);
+				//}
+				//if (!wantChild && child != null) {
+				//	destroyNode(child);
+				//	child = null;
+				//}
+
 				if (wantChild && child == null) {
-					child = createNode(childLod, childPos, childSize, node);
+					createNodeOp(node, i, childLod, dist);
 				}
 				if (!wantChild && child != null) {
-					destroyNode(child);
-					child = null;
+					deleteNodeOp(node, i, childLod, dist);
 				}
 
-				if (child != null) {
+				if (child != null && wantChild) {
 					node.latestDistToPlayer = dist;
 					
 					updateTree(child);
 				}
-
-				node.Children[i] = child;
 			}
 		}
 		
-		void resortNodeList () {
-			Profiler.BeginSample("resortNodeList()");
-			sortedNodes.Sort( (l, r) => {
-				//int order =				-l.InTree				.CompareTo(r.InTree);
-				int             order =	 (l.lod			        .CompareTo(r.lod));
-				if (order == 0) order =	 l.latestDistToPlayer	.CompareTo(r.latestDistToPlayer);
-				return order;
-			});
-			Profiler.EndSample();
+		class RemeshNodeOp : INodeOperation {
+			TerrainNode node;
+			int childMask;
+			
+			MeshingJob meshingJob;
+
+			public void Schedule ();
+			public bool IsCompleted () => meshingJob.IsCompleted;
+			public void Apply (TerrainOctree octree) {
+				if (node.IsDestroyed)
+					return; // can happen on root move
+				node.mesh = mesh;
+			}
+		}
+		class CreateNodeOp : INodeOperation {
+			TerrainNode parent;
+			int childIndx;
+			
+			GetVoxelsJob voxels;
+			MeshingJob meshingJob;
+			
+			public void Schedule ();
+			public bool IsCompleted () => meshingJob.IsCompleted;
+			public void Apply (TerrainOctree octree) {
+				if (parent.IsDestroyed)
+					return; // can happen on root move
+				Debug.Assert(parent.Children[childIndx] == null);
+				
+				float childSize = parent.size / 2;
+				float3 childPos = parent.pos + (float3)TerrainNode.ChildOrder[childIndx] * childSize;
+
+				var n = octree.createNode(parent.lod -1, childPos, childSize);
+
+				n.AssignVoxels(voxels);
+				n.mesh = TerrainNode.SetMesh(n.mesh, n.go, );
+
+				parent.Children[childIndx] = n;
+			}
+		}
+		class DeleteNodeOp : INodeOperation {
+			TerrainNode parent;
+			TerrainNode node;
+			int childIndx;
+
+			public void Schedule () { }
+			public bool IsCompleted () => true;
+			public void Apply (TerrainOctree octree) {
+				if (parent.IsDestroyed)
+					return; // can happen on root move
+				Debug.Assert(parent.Children[childIndx] == node);
+
+				destroyNode(node);
+				parent.Children[childIndx] = null;
+			}
+		}
+
+		void createNodeOp (TerrainNode parent, int childIndx, int lod, float dist) {
+			
+		}
+		void deleteNodeOp (TerrainNode parent, int childIndx, int lod, float dist) {
+			
+		}
+
+		interface INodeOperation {
+			void Schedule ();
+			bool IsCompleted ();
+			void Apply (TerrainOctree octree);
+		}
+		class AtomicTreeOp {
+			public int			lod;
+			public float		dist;
+			
+			public INodeOperation[] ops;
+		};
+		AtomicTreeOp curOp = null;
+		
+		void storeAtomicOp (int lod, float dist, INodeOperation[] ops) {
+			var newOp = new AtomicTreeOp { lod = lod, dist = dist };
+			if (curOp == null || priotorizeNodes(newOp, curOp) < 0)
+				curOp = newOp;
+		}
+		
+		int priotorizeNodes (AtomicTreeOp l, AtomicTreeOp r) {
+			int             order = l.lod .CompareTo(r.lod );
+			if (order == 0) order = l.dist.CompareTo(r.dist);
+			return order;
+		}
+		
+		void processAtomicTreeOp () {
+			if (curOp != null) {
+				foreach (var op in curOp.ops)
+					op.Schedule();
+			}
+		}
+
+		void applyAtomicTreeOp () {
+			if (curOp != null && curOp.ops.All(x => x.IsCompleted())) {
+				foreach (var op in curOp.ops)
+					op.Apply(this);
+			}
+			curOp = null;
 		}
 
 		TerrainVoxelizer voxelizer;
@@ -144,7 +232,6 @@ namespace OctreeGeneration {
 
 			if (root == null) {
 				root = createNode(MaxLod, rootPos, rootSize);
-				root.latestDistToPlayer = 0;
 			}
 
 			// Move Root node
@@ -152,7 +239,6 @@ namespace OctreeGeneration {
 
 				var oldRoot = root;
 				root = createNode(MaxLod, rootPos, rootSize);
-				root.latestDistToPlayer = 0;
 				
 				Debug.Assert(oldRoot.lod == root.lod);
 				
@@ -180,16 +266,18 @@ namespace OctreeGeneration {
 				destroyNode(oldRoot);
 			}
 
+			applyAtomicTreeOp();
+
 			updateTree(root);
 
-			resortNodeList();
+			processAtomicTreeOp();
 
-			mesher.ManualUpdateStartJobs(sortedNodes, this);
-
-			voxelizer.ManualUpdate(sortedNodes, this);
+			//mesher.ManualUpdateStartJobs(sortedNodes, this);
+			//
+			//voxelizer.ManualUpdate(sortedNodes, this);
 		}
 		void LateUpdate () {
-			mesher.ManualUpdateFinishJobs(sortedNodes, this);
+			//mesher.ManualUpdateFinishJobs(sortedNodes, this);
 		}
 
 		void OnDestroy () {
