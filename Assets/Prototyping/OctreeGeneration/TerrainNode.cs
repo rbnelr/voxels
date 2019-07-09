@@ -29,6 +29,7 @@ namespace OctreeGeneration {
 		public readonly float size;
 		
 		// this represents the Terrain Octree, TerrainNodes are also cached, so TerrainNodes can exits outside the tree, they should be disabled in that case
+		public TerrainNode Parent;
 		public TerrainNode[] Children = new TerrainNode[8];
 
 		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
@@ -45,10 +46,18 @@ namespace OctreeGeneration {
 		public bool IsDestroyed => go == null;
 
 		public Voxels voxels;
+		
+		public bool needsVoxelize = true;
+		public bool needsRemesh = true;
+		public bool needsSeamRemesh = true;
+
+		public float latestDistToPlayer;
 
 		//public DualContouring.Cell[,,] DCCells;
 
-		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {
+		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy, TerrainNode parent) {
+			this.Parent = parent;
+
 			this.lod = lod;
 			this.pos = pos;
 			this.size = size;
@@ -83,6 +92,8 @@ namespace OctreeGeneration {
 				this.voxels.DecRef();
 
 			this.voxels = voxels;
+
+			needsVoxelize = false;
 		}
 		
 		static List<Vector3>	verticesBuf  = new List<Vector3>();
@@ -91,7 +102,7 @@ namespace OctreeGeneration {
 		static List<Color>		colorsBuf    = new List<Color>();
 		static List<int>		trianglesBuf = new List<int>();
 
-		public static Mesh SetMesh (Mesh mesh, GameObject go, NativeList<float3> vertices, NativeList<float3> normals, NativeList<float2> uvs, NativeList<Color> colors, NativeList<int> triangles) {
+		static Mesh _AssignMesh (Mesh mesh, GameObject go, NativeList<float3> vertices, NativeList<float3> normals, NativeList<float2> uvs, NativeList<Color> colors, NativeList<int> triangles) {
 
 			if (mesh == null) {
 				mesh = new Mesh();
@@ -120,6 +131,20 @@ namespace OctreeGeneration {
 			Profiler.EndSample();
 
 			return mesh;
+		}
+		
+		public void AssignMesh (NativeList<float3> vertices, NativeList<float3> normals, NativeList<float2> uvs, NativeList<Color> colors, NativeList<int> triangles) {
+			bool hadMesh = mesh != null;
+			
+			mesh = _AssignMesh(mesh, go, vertices, normals, uvs, colors, triangles);
+
+			needsRemesh = false;
+
+		}
+		public void AssignSeamMesh (NativeList<float3> vertices, NativeList<float3> normals, NativeList<float2> uvs, NativeList<Color> colors, NativeList<int> triangles) {
+			seamMesh = _AssignMesh(seamMesh, seamGo, vertices, normals, uvs, colors, triangles);
+
+			needsSeamRemesh = false;
 		}
 	}
 }
