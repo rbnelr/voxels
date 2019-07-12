@@ -26,9 +26,9 @@ namespace OctreeGeneration {
 		public const int VOXEL_COUNT = 32;
 
 		 // TerrainNode has a fixed location after it is created
-		public readonly int lod;
-		public readonly float3 pos; // lower corner not center
-		public readonly float size;
+		public readonly int Lod;
+		public readonly float3 Pos; // lower corner not center
+		public readonly float Size;
 		
 		// this represents the Terrain Octree, TerrainNodes are also cached, so TerrainNodes can exits outside the tree, they should be disabled in that case
 		public TerrainNode[] Children = new TerrainNode[8];
@@ -38,15 +38,15 @@ namespace OctreeGeneration {
 			return Children[ octant.z * 4 + octant.y * 2 + octant.x ];
 		}
 		
-		public GameObject go;
+		public GameObject Go;
 		public Mesh mesh = null;
 
-		public GameObject seamGo;
-		public Mesh seamMesh = null;
+		public GameObject SeamGo;
+		public Mesh SeamMesh = null;
 
-		public bool IsDestroyed => go == null;
+		public bool IsDestroyed => Go == null;
 
-		public Voxels voxels;
+		public Voxels Voxels;
 
 		//public DualContouring.Cell[,,] DCCells;
 		
@@ -59,40 +59,40 @@ namespace OctreeGeneration {
 		}
 
 		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {
-			this.lod = lod;
-			this.pos = pos;
-			this.size = size;
+			this.Lod = lod;
+			this.Pos = pos;
+			this.Size = size;
 			
-			go = Object.Instantiate(TerrainNodePrefab, pos, Quaternion.identity, goHierachy);
-			seamGo = go.transform.Find("Seam").gameObject;
+			Go = Object.Instantiate(TerrainNodePrefab, pos, Quaternion.identity, goHierachy);
+			SeamGo = Go.transform.Find("Seam").gameObject;
 		}
 
 		public void Destroy () {
 			
-			if (seamMesh != null)
-				Object.Destroy(seamMesh);
-			seamMesh = null;
+			if (SeamMesh != null)
+				Object.Destroy(SeamMesh);
+			SeamMesh = null;
 
 			if (mesh != null)
 				Object.Destroy(mesh);
 			mesh = null;
 			
-			Object.Destroy(seamGo);
-			seamGo = null;
+			Object.Destroy(SeamGo);
+			SeamGo = null;
 
-			Object.Destroy(go);
-			go = null;
+			Object.Destroy(Go);
+			Go = null;
 
-			voxels?.DecRef();
+			Voxels?.DecRef();
 		}
 		
 		public void SetVoxels (Voxels voxels) {
 			voxels.IncRef();
 
-			if (this.voxels != null)
-				this.voxels.DecRef();
+			if (this.Voxels != null)
+				this.Voxels.DecRef();
 
-			this.voxels = voxels;
+			this.Voxels = voxels;
 		}
 		
 		static List<Vector3>	verticesBuf  = new List<Vector3>();

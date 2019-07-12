@@ -21,16 +21,21 @@ namespace OctreeGeneration {
 
 		const float ISO = 0.0f; // TODO: make variable for testing?
 		
+		public MeshingJob MeshNode (float nodeSize, int childrenMask, TerrainGenerator.GetVoxelsJob voxelsJob) {
+			return new MeshingJob(nodeSize, childrenMask, ISO, DCIterStrength, DCMaxIterations, voxelsJob: voxelsJob);
+		}
 		public MeshingJob MeshNode (float nodeSize, int childrenMask, Voxels voxels) {
-			return new MeshingJob(nodeSize, childrenMask, voxels, ISO, DCIterStrength, DCMaxIterations);
+			return new MeshingJob(nodeSize, childrenMask, ISO, DCIterStrength, DCMaxIterations, voxels: voxels);
 		}
 
 		public class MeshingJob : NodeOperation {
-			Voxels voxels;
+			TerrainGenerator.GetVoxelsJob voxelsJob = null;
+			Voxels voxels = null;
+
 			JobHandle? jobHandle;
 			CalcNodeJob job;
 			
-			public MeshingJob (float nodeSize, int childrenMask, Voxels voxels, float iso, float DCIterStrength, int DCMaxIterations) {
+			public MeshingJob (float nodeSize, int childrenMask, float iso, float DCIterStrength, int DCMaxIterations, TerrainGenerator.GetVoxelsJob voxelsJob=null, Voxels voxels=null) { // either existing voxels or voxels job
 				job = new CalcNodeJob {
 					NodeSize = nodeSize,
 					childrenMask = childrenMask,
@@ -38,6 +43,8 @@ namespace OctreeGeneration {
 					DCIterStrength = DCIterStrength,
 					DCMaxIterations = DCMaxIterations,
 				};
+				this.voxelsJob = voxelsJob;
+				this.voxels = voxelsJob != null ? voxelsJob.Voxels : voxels;
 			}
 			public override void Schedule () {
 				Profiler.BeginSample("MeshingJob.Schedule()");
@@ -59,7 +66,7 @@ namespace OctreeGeneration {
 				job.colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
 				job.triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
 
-				jobHandle = job.Schedule();
+				jobHandle = job.Schedule(voxelsJob != null ? voxelsJob.JobHandle.Value : default(JobHandle));
 				
 				Profiler.EndSample();
 			}
@@ -67,7 +74,7 @@ namespace OctreeGeneration {
 			public override void Apply (TerrainNode node) {
 				jobHandle.Value.Complete();
 				
-				TerrainNode.SetMesh(node.mesh, node.go, job.vertices, job.normals, job.uv, job.colors, job.triangles);
+				TerrainNode.SetMesh(node.mesh, node.Go, job.vertices, job.normals, job.uv, job.colors, job.triangles);
 				
 				Dispose();
 			}
@@ -373,8 +380,8 @@ namespace OctreeGeneration {
 					}
 				}
 
-				if (dbgCount > 0)
-					Thread.Sleep(100);
+				//if (dbgCount > 0)
+				//	Thread.Sleep(100);
 				
 				float size = NodeSize / TerrainNode.VOXEL_COUNT;
 

@@ -199,7 +199,7 @@ namespace OctreeGeneration {
 
 		public class GetVoxelsJob : NodeOperation {
 			public Voxels Voxels;
-			JobHandle? JobHandle;
+			public JobHandle? JobHandle;
 			Job job;
 			
 			public GetVoxelsJob (float3 pos, float size, TerrainGeneratorStruct gen) {
