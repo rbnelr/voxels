@@ -15,8 +15,8 @@ namespace OctreeGeneration {
 		public abstract void Dispose ();
 	}
 	public abstract class AtomicTreeOperation {
-		public int   lod;
-		public float dist;
+		public readonly int   lod;
+		public readonly float dist;
 
 		public AtomicTreeOperation (int lod, float dist) {
 			this.lod = lod;
@@ -27,6 +27,8 @@ namespace OctreeGeneration {
 		public abstract bool IsCompleted ();
 		public abstract void Apply (TerrainOctree octree);
 		public abstract void Dispose ();
+
+		public abstract override string ToString ();
 	}
 
 	[RequireComponent(typeof(TerrainGenerator), typeof(TerrainMesher))]
@@ -199,9 +201,11 @@ namespace OctreeGeneration {
 		}
 
 		void OnDestroy () {
-			if (curOp != null)
-				curOp.Dispose();
-			curOp = null;
+			Debug.Assert(curOp == null);
+
+			if (runningOp != null)
+				runningOp.Dispose();
+			runningOp = null;
 			if (root != null)
 				destroyNode(root); // rebuild tree
 			root = null;
@@ -213,7 +217,8 @@ namespace OctreeGeneration {
 		AtomicTreeOperation runningOp = null;
 		
 		int priotorizeNodes (AtomicTreeOperation l, AtomicTreeOperation r) {
-			int             order = l.lod .CompareTo(r.lod );
+			int             order = (l is DeleteNodeOp ? 0:1).CompareTo(r is DeleteNodeOp ? 0:1); // priotorize deltions over creations since they're faster and we prevent unbounded node counts this way 
+			//if (order == 0) order = -l.lod .CompareTo(r.lod );
 			if (order == 0) order = l.dist.CompareTo(r.dist);
 			return order;
 		}
@@ -236,12 +241,16 @@ namespace OctreeGeneration {
 		}
 
 		class CreateNodeOp : AtomicTreeOperation {
-			TerrainNode parent;
-			int childIndx;
-			int lod;
-			float3 pos;
-			float size;
-			
+			readonly TerrainNode parent;
+			readonly int childIndx;
+			readonly float3 pos;
+			readonly float size;
+
+			public override string ToString () {
+				var coord = (int3)round(pos / size);
+				return string.Format("Creating Node (#{0:2} {1:2}:{2:2})", lod, coord.x, coord.y, coord.z);
+			}
+
 			TerrainGenerator.GetVoxelsJob voxelsJob;
 			TerrainMesher.MeshingJob meshingJob;
 			TerrainMesher.MeshingJob parentMeshingJob;
@@ -249,7 +258,6 @@ namespace OctreeGeneration {
 			public CreateNodeOp (TerrainNode parent, int childIndx, int lod, float dist, float3 pos, float size) : base(lod, dist) {
 				this.parent = parent;
 				this.childIndx = childIndx;
-				this.lod = lod;
 				this.pos = pos;
 				this.size = size;
 			}
@@ -299,11 +307,18 @@ namespace OctreeGeneration {
 		}
 
 		class DeleteNodeOp : AtomicTreeOperation {
-			TerrainNode parent;
-			int childIndx;
+			readonly TerrainNode parent;
+			readonly int childIndx;
 
 			TerrainMesher.MeshingJob parentMeshingJob;
 			
+			public override string ToString () {
+				var pos = parent.Children[childIndx].Pos;
+				var size = parent.Children[childIndx].Size;
+				var coord = (int3)round(pos / size);
+				return string.Format("Deleting Node (#{0:2} {1:2}:{2:2})", lod, coord.x, coord.y, coord.z);
+			}
+
 			public DeleteNodeOp (TerrainNode parent, int childIndx, int lod, float dist) : base(lod, dist) {
 				this.parent = parent;
 				this.childIndx = childIndx;
@@ -370,11 +385,13 @@ namespace OctreeGeneration {
 		//}
 
 		#region Debug Visualizations
-		public static readonly Color[] drawColors = new Color[] {
+		public static readonly Color[] _drawColors = new Color[] {
 			Color.blue, Color.cyan, Color.green, Color.red, Color.yellow, Color.magenta, Color.gray,
 		};
+		public static Color _GetLodColor (int lod) => _drawColors[clamp(lod % _drawColors.Length, 0, _drawColors.Length-1)];
+
 		void drawTree (TerrainNode n) {
-			Gizmos.color = drawColors[clamp(n.Lod % drawColors.Length, 0, drawColors.Length-1)];
+			Gizmos.color = _GetLodColor(n.Lod);
 			Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size);
 			
 			//if (n.voxels != null)
@@ -404,6 +421,9 @@ namespace OctreeGeneration {
 			
 			GUI.Label(new Rect(0, 0, 500,30), "Terrain Nodes: "+ _countNodes);
 			GUI.Label(new Rect(0, 20, 500,30), "Root Node Size: "+ rootSize);
+
+			GUI.color = runningOp == null ? Color.white : _GetLodColor(runningOp.lod);
+			GUI.Label(new Rect(0, 40, 500,30), "Async: "+ runningOp?.ToString() ?? "");
 		}
 		#endregion
 	}
