@@ -12,7 +12,6 @@ namespace Prototyping {
 
 		public float MouselookSensitiviy = 1f / 100f; // screen radii per mouse input units
 		
-		public float2 test = float2(0,0);
 		public float2 MouselookAng = float2(0,0);
 
 		public bool TestFall = false;
@@ -58,7 +57,7 @@ namespace Prototyping {
 
 			moveVec = transform.TransformVector(moveVec);
 
-			transform.localPosition += (Vector3)moveVec;
+			transform.localPosition += (Vector3)moveVec * Time.deltaTime;
 
 			if (TestFall)
 				transform.localPosition += (Vector3)float3(0, TestFallSpeed, 0) * Time.deltaTime;
