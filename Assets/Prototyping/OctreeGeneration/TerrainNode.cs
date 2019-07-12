@@ -23,6 +23,8 @@ namespace OctreeGeneration {
 	}
 
 	public class TerrainNode {
+		public const int VOXEL_COUNT = 32;
+
 		 // TerrainNode has a fixed location after it is created
 		public readonly int lod;
 		public readonly float3 pos; // lower corner not center
@@ -47,6 +49,14 @@ namespace OctreeGeneration {
 		public Voxels voxels;
 
 		//public DualContouring.Cell[,,] DCCells;
+		
+		public int GetChildrenMask () {
+			int mask = 0;
+			for (int i=0; i<8; i++)
+				if (Children[i] != null)
+					mask |= 1 << i;
+			return mask;
+		}
 
 		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {
 			this.lod = lod;
@@ -76,7 +86,7 @@ namespace OctreeGeneration {
 			voxels?.DecRef();
 		}
 		
-		public void AssignVoxels (Voxels voxels) {
+		public void SetVoxels (Voxels voxels) {
 			voxels.IncRef();
 
 			if (this.voxels != null)

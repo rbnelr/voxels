@@ -14,121 +14,82 @@ namespace OctreeGeneration {
 	
 	public class TerrainMesher : MonoBehaviour {
 		
-		List<TerrainNode> _sortedNodes;
-		TerrainOctree _octree;
-		
 		public float DCIterStrength = 1f;
 		public int DCMaxIterations = 5;
 		float prevDCIterStrength;
 		int prevDCIterations;
-		
-		readonly int3[] neighbourDirs = new int3[] {
-			int3(-1,-1,-1), int3( 0,-1,-1), int3(+1,-1,-1),
-			int3(-1, 0,-1), int3( 0, 0,-1), int3(+1, 0,-1),
-			int3(-1,+1,-1), int3( 0,+1,-1), int3(+1,+1,-1),
 
-			int3(-1,-1, 0), int3( 0,-1, 0), int3(+1,-1, 0),
-			int3(-1, 0, 0),	                int3(+1, 0, 0),
-			int3(-1,+1, 0), int3( 0,+1, 0), int3(+1,+1, 0),
-
-			int3(-1,-1,+1), int3( 0,-1,+1), int3(+1,-1,+1),
-			int3(-1, 0,+1), int3( 0, 0,+1), int3(+1, 0,+1),
-			int3(-1,+1,+1), int3( 0,+1,+1), int3(+1,+1,+1),
-		};
-		Dictionary<int3, TerrainNode> neighbours = new Dictionary<int3, TerrainNode>();
+		const float ISO = 0.0f; // TODO: make variable for testing?
 		
-		void FlagSeamRemesh (TerrainNode n) { // TODO: This flags too many nodes, because only some of them actually neighbour the node that caused the flagging
-			n.needsSeamRemesh = true;
-			if (n.Children != null) {
-				for (int i=0; i<8; ++i) {
-					FlagSeamRemesh(n.Children[i]);
-				}
-			}
+		public MeshingJob MeshNode (float nodeSize, int childrenMask, Voxels voxels) {
+			return new MeshingJob(nodeSize, childrenMask, voxels, ISO, DCIterStrength, DCMaxIterations);
 		}
-		
-		List<RunningNodeCalcJob> runningJobs = new List<RunningNodeCalcJob>();
 
-		public int MaxJobs = 3;
-
-		public void ManualUpdateStartJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
-			if (DCIterStrength != prevDCIterStrength || DCMaxIterations != prevDCIterations) {
-
-			}
-			prevDCIterStrength = DCIterStrength;
-			prevDCIterations = DCMaxIterations;
-
-			_sortedNodes = sortedNodes;
-			_octree = octree;
-
-			Profiler.BeginSample("StartJob loop");
-			for (int i=0; i<sortedNodes.Count; ++i) {
-				var node = sortedNodes[i];
-
-				bool remesh =	node.needsRemesh && // remesh was flagged
-								node.voxels != null; // we have voxels yet (if these voxels are up to date or if there if already a voxelize job is handled by the octree)
-				//bool seamRemesh = node.needsSeamRemesh &&
-				//				  node.voxels != null;
-
-				if (	remesh && // A remesh was flagged
-						runningJobs.Find(x => x.node == node) == null && // not running yet
-						runningJobs.Count < MaxJobs // not too many jobs yet
-						) {
-
-					int childrenMask = 0;
-					for (int j=0; j<8; ++j)
-						if (node.Children[j] != null && node.Children[j].mesh != null)
-							childrenMask |= 1 << j;
-					
-					runningJobs.Add( RunningNodeCalcJob.Start(node, childrenMask, octree.VoxelSize, octree.NodeVoxels, DCIterStrength, DCMaxIterations) );
-				}
-				
-				//if (seamRemesh) {
-				//	for (int j=0; j<neighbourDirs.Length; ++j) {
-				//		var neighb = _octree.GetNeighbourTree(node, neighbourDirs[j]);
-				//		if (neighb != null) {
-				//			
-				//			if (remesh) {
-				//				FlagSeamRemesh(neighb);
-				//			}
-				//
-				//			if (neighb.IsLeaf)
-				//				neighbours.Add(neighbourDirs[j], neighb);
-				//		}
-				//	}
-				//
-				//	dc.CalcNodeSeam(node, neighbours, _octree.VoxelSize, _octree.NodeVoxels);
-				//}
-				//
-				//neighbours.Clear();
-			}
-			Profiler.EndSample();
-		}
-		public void ManualUpdateFinishJobs (List<TerrainNode> sortedNodes, TerrainOctree octree) {
+		public class MeshingJob : NodeOperation {
+			Voxels voxels;
+			JobHandle? jobHandle;
+			CalcNodeJob job;
 			
-			Profiler.BeginSample("Finish Jobs");
-			for (int i=0; i<runningJobs.Count; ++i) {
-				var job = runningJobs[i];
-
-				if (job.JobHandle.IsCompleted) {
-					job.Finish();
-					runningJobs.RemoveAtSwapBack(i);
-				} else {
-					++i;
-				}
+			public MeshingJob (float nodeSize, int childrenMask, Voxels voxels, float iso, float DCIterStrength, int DCMaxIterations) {
+				job = new CalcNodeJob {
+					NodeSize = nodeSize,
+					childrenMask = childrenMask,
+					iso = iso,
+					DCIterStrength = DCIterStrength,
+					DCMaxIterations = DCMaxIterations,
+				};
 			}
-			Profiler.EndSample();
-		}
-		
-		void OnGUI () {
-			GUI.Label(new Rect(0, 60, 500,30), "Mesher    Jobs: ");
+			public override void Schedule () {
+				Profiler.BeginSample("MeshingJob.Schedule()");
 
-			for (int i=0; i<runningJobs.Count; ++i) {
-				var job = runningJobs[i];
-				int3 name = (int3)floor(job.node.pos / job.node.size);
+				int ArraySize = TerrainNode.VOXEL_COUNT + 1;
+				
+				int edgeAlloc = ArraySize * ArraySize * 4;
+				int vertexAlloc = ArraySize * ArraySize * 6;
+				
+				voxels.IncRef();
+				job.Voxels = voxels.native;
 
-				GUI.color = TerrainOctree.drawColors[clamp(job.node.lod % TerrainOctree.drawColors.Length, 0, TerrainOctree.drawColors.Length-1)];
+				job.Cells = new NativeArray<Cell>(TerrainNode.VOXEL_COUNT * TerrainNode.VOXEL_COUNT * TerrainNode.VOXEL_COUNT, Allocator.Persistent);
+				job.Edges = new NativeList<Edge>(edgeAlloc, Allocator.Persistent);
+			
+				job.vertices  = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
+				job.normals   = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
+				job.uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
+				job.colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
+				job.triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
 
-				GUI.Label(new Rect(100 + i*100, 40, 100,30), name.ToString());
+				jobHandle = job.Schedule();
+				
+				Profiler.EndSample();
+			}
+			public override bool IsCompleted () => jobHandle.Value.IsCompleted;
+			public override void Apply (TerrainNode node) {
+				jobHandle.Value.Complete();
+				
+				TerrainNode.SetMesh(node.mesh, node.go, job.vertices, job.normals, job.uv, job.colors, job.triangles);
+				
+				Dispose();
+			}
+
+			public override void Dispose () {
+				if (jobHandle != null) {
+					jobHandle.Value.Complete();
+					
+					job.Cells     .Dispose();
+					job.Edges     .Dispose();
+
+					job.vertices  .Dispose();
+					job.normals   .Dispose();
+					job.uv        .Dispose();
+					job.colors    .Dispose();
+					job.triangles .Dispose();
+					
+					voxels.DecRef();
+					
+					jobHandle = null;
+					voxels = null;
+				}
 			}
 		}
 
@@ -170,7 +131,6 @@ namespace OctreeGeneration {
 		struct CalcNodeJob : IJob {
 			[ReadOnly] public int childrenMask;
 			[ReadOnly] public float NodeSize;
-			[ReadOnly] public int NodeVoxels;
 			[ReadOnly] public float iso;
 			[ReadOnly] public float DCIterStrength;
 			[ReadOnly] public int DCMaxIterations;
@@ -204,7 +164,7 @@ namespace OctreeGeneration {
 			}
 
 			unsafe void SetEdge (int3 cellIndex, int edge, int edgeIndex) {
-				int i = _3dToFlatIndex(cellIndex, NodeVoxels);
+				int i = _3dToFlatIndex(cellIndex, TerrainNode.VOXEL_COUNT);
 				var cell = Cells[i];
 
 				cell.active = true;
@@ -214,11 +174,9 @@ namespace OctreeGeneration {
 			}
 
 			void FindActive (int x, int y, int z) {
-				int ArraySize = NodeVoxels + 1;
-
 				int3 index = int3(x,y,z);
 
-				if ((childrenMask & (1 <<_3dToFlatIndex(index / (NodeVoxels/2), 2))) != 0)
+				if ((childrenMask & (1 <<_3dToFlatIndex(index / (TerrainNode.VOXEL_COUNT/2), 2))) != 0)
 					return;
 
 				var posA = index;
@@ -226,26 +184,26 @@ namespace OctreeGeneration {
 				var posC = index + int3(0,1,0);
 				var posD = index + int3(0,0,1);
 						
-				bool voxBValid = all(posB < ArraySize);
-				bool voxCValid = all(posC < ArraySize);
-				bool voxDValid = all(posD < ArraySize);
+				bool voxBValid = all(posB < TerrainNode.VOXEL_COUNT+1);
+				bool voxCValid = all(posC < TerrainNode.VOXEL_COUNT+1);
+				bool voxDValid = all(posD < TerrainNode.VOXEL_COUNT+1);
 						
 				Voxel voxA;
 				Voxel voxB = default;
 				Voxel voxC = default;
 				Voxel voxD = default;
 
-							   voxA = Voxels[_3dToFlatIndex(posA, ArraySize)];
-				if (voxBValid) voxB = Voxels[_3dToFlatIndex(posB, ArraySize)];
-				if (voxCValid) voxC = Voxels[_3dToFlatIndex(posC, ArraySize)];
-				if (voxDValid) voxD = Voxels[_3dToFlatIndex(posD, ArraySize)];
+							   voxA = Voxels[_3dToFlatIndex(posA, TerrainNode.VOXEL_COUNT+1)];
+				if (voxBValid) voxB = Voxels[_3dToFlatIndex(posB, TerrainNode.VOXEL_COUNT+1)];
+				if (voxCValid) voxC = Voxels[_3dToFlatIndex(posC, TerrainNode.VOXEL_COUNT+1)];
+				if (voxDValid) voxD = Voxels[_3dToFlatIndex(posD, TerrainNode.VOXEL_COUNT+1)];
 
 				bool signA =              (voxA.distance < iso);
 				bool edgeX = voxBValid && (voxA.distance < iso) != (voxB.distance < iso);
 				bool edgeY = voxCValid && (voxA.distance < iso) != (voxC.distance < iso);
 				bool edgeZ = voxDValid && (voxA.distance < iso) != (voxD.distance < iso);
 
-				int NV = NodeVoxels;
+				int NV = TerrainNode.VOXEL_COUNT;
 
 				if (edgeX) {
 					var edgeIndex = AddEdge(0, index, signA, voxA, voxB, posA, posB, iso);
@@ -372,34 +330,32 @@ namespace OctreeGeneration {
 			}
 			
 			void emitTriangle (int3 indxA, int3 indxB, int3 indxC, float cellSize) {
-				var a = Cells[_3dToFlatIndex(indxA, NodeVoxels)];
-				var b = Cells[_3dToFlatIndex(indxB, NodeVoxels)];
-				var c = Cells[_3dToFlatIndex(indxC, NodeVoxels)];
+				var a = Cells[_3dToFlatIndex(indxA, TerrainNode.VOXEL_COUNT)];
+				var b = Cells[_3dToFlatIndex(indxB, TerrainNode.VOXEL_COUNT)];
+				var c = Cells[_3dToFlatIndex(indxC, TerrainNode.VOXEL_COUNT)];
 
 				emitTriangle(a, b, c, cellSize, Color.white);
 			}
 
 			public void Execute () {
-				int ArraySize = NodeVoxels + 1;
-				
 				// Find active edges and cells
-				for (int z=0; z<ArraySize; ++z) {
-					for (int y=0; y<ArraySize; ++y) {
-						for (int x=0; x<ArraySize; ++x) {
+				for (int z=0; z<TerrainNode.VOXEL_COUNT+1; ++z) {
+					for (int y=0; y<TerrainNode.VOXEL_COUNT+1; ++y) {
+						for (int x=0; x<TerrainNode.VOXEL_COUNT+1; ++x) {
 							FindActive(x,y,z);
 						}
 					}
 				}
 
-				//int dbgCount = 0;
+				int dbgCount = 0;
 				
 				// Calculate vertices positions
-				for (int z=0; z<NodeVoxels; ++z) {
-					for (int y=0; y<NodeVoxels; ++y) {
-						for (int x=0; x<NodeVoxels; ++x) {
+				for (int z=0; z<TerrainNode.VOXEL_COUNT; ++z) {
+					for (int y=0; y<TerrainNode.VOXEL_COUNT; ++y) {
+						for (int x=0; x<TerrainNode.VOXEL_COUNT; ++x) {
 							int3 index = int3(x,y,z);
 
-							int i = _3dToFlatIndex(index, NodeVoxels);
+							int i = _3dToFlatIndex(index, TerrainNode.VOXEL_COUNT);
 
 							Cell cell = Cells[i];
 							if (cell.active) {
@@ -411,16 +367,16 @@ namespace OctreeGeneration {
 								cell.vertex = vertex;
 								Cells[i] = cell;
 
-								//dbgCount++;
+								dbgCount++;
 							}
 						}
 					}
 				}
 
-				//if (dbgCount > 0)
-				//	Thread.Sleep(500);
+				if (dbgCount > 0)
+					Thread.Sleep(100);
 				
-				float size = NodeSize / NodeVoxels;
+				float size = NodeSize / TerrainNode.VOXEL_COUNT;
 
 				// Output the face for each active edge
 				for (int i=0; i<Edges.Length; ++i) {
@@ -429,10 +385,10 @@ namespace OctreeGeneration {
 					var cell2 = Edges[i].GetCellIndex(2);
 					var cell3 = Edges[i].GetCellIndex(3);
 				
-					if (	all(cell0 >= 0 & cell0 < NodeVoxels) &&
-							all(cell1 >= 0 & cell1 < NodeVoxels) &&
-							all(cell2 >= 0 & cell2 < NodeVoxels) &&
-							all(cell3 >= 0 & cell3 < NodeVoxels)) {
+					if (	all(cell0 >= 0 & cell0 < TerrainNode.VOXEL_COUNT) &&
+							all(cell1 >= 0 & cell1 < TerrainNode.VOXEL_COUNT) &&
+							all(cell2 >= 0 & cell2 < TerrainNode.VOXEL_COUNT) &&
+							all(cell3 >= 0 & cell3 < TerrainNode.VOXEL_COUNT)) {
 						if (Edges[i].flipFace) {
 							emitTriangle(cell0, cell1, cell2, size);
 							emitTriangle(cell2, cell1, cell3, size);
@@ -445,88 +401,19 @@ namespace OctreeGeneration {
 			}
 		}
 		
-		class RunningNodeCalcJob {
-			public TerrainNode node;
-			public JobHandle JobHandle;
-			public CalcNodeJob job;
-
-			public static RunningNodeCalcJob Start (TerrainNode node, int childrenMask, float VoxelSize, int NodeVoxels, float DCIterStrength, int DCMaxIterations) {
-				int ArraySize = NodeVoxels + 1;
-				
-				int edgeAlloc = ArraySize * ArraySize * 4;
-				int vertexAlloc = ArraySize * ArraySize * 6;
-			
-				node.voxels.IncRef();
-
-				var job = new RunningNodeCalcJob { node = node };
-
-				job.job = new CalcNodeJob {
-					childrenMask = childrenMask,
-					NodeSize = node.size,
-					NodeVoxels = NodeVoxels,
-					iso = 0.0f,
-					DCIterStrength = DCIterStrength,
-					DCMaxIterations = DCMaxIterations,
-					Voxels = node.voxels.native,
-					
-					Cells = new NativeArray<Cell>(NodeVoxels * NodeVoxels * NodeVoxels, Allocator.Persistent),
-					Edges = new NativeList<Edge>(edgeAlloc, Allocator.Persistent),
-			
-					vertices  = new NativeList<float3> (vertexAlloc, Allocator.Persistent),
-					normals   = new NativeList<float3> (vertexAlloc, Allocator.Persistent),
-					uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent),
-					colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent),
-					triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent),
-				};
-
-				job.JobHandle = job.job.Schedule();
-
-				return job;
-			}
-
-			public void Finish () {
-				Profiler.BeginSample("FinishJob");
-				JobHandle.Complete();
-
-				if (!node.IsDestroyed)
-					node.AssignMesh(job.vertices, job.normals, job.uv, job.colors, job.triangles);
-				
-				job.Cells.Dispose();
-				job.Edges.Dispose();
-			
-				job.vertices  .Dispose();
-				job.normals   .Dispose();
-				job.uv        .Dispose();
-				job.colors    .Dispose();
-				job.triangles .Dispose();
-
-				node.needsRemesh = false;
-
-				node.voxels.DecRef();
-				Profiler.EndSample();
-			}
-		}
-		
-		void OnDestroy () {
-			Profiler.BeginSample("OnDestroy");
-			foreach (var job in runningJobs)
-				job.Finish(); // block main thread
-			runningJobs.Clear();
-			Profiler.EndSample();
-		}
 	}
 
 	public struct DualContouring {
 		
 		#if false
-		void ProcessEdgeCell (int3 index, int axis, TerrainNode node, int NodeVoxels, float iso) {
+		void ProcessEdgeCell (int3 index, int axis, TerrainNode node, float iso) {
 			
 			var posA = index;
 			var posB = index;
 			posB[axis] += 1;
 
-			var voxA = node.voxels.native[_3dToFlatIndex(posA, NodeVoxels+1)];
-			var voxB = node.voxels.native[_3dToFlatIndex(posB, NodeVoxels+1)];
+			var voxA = node.voxels.native[_3dToFlatIndex(posA, TerrainNode.VOXEL_COUNT+1)];
+			var voxB = node.voxels.native[_3dToFlatIndex(posB, TerrainNode.VOXEL_COUNT+1)];
 
 			bool signA = voxA.distance < iso ^ axis == 1; // flip y faces because unity is left handed y up and i usually think right-handed with z up, somewhere my though process caused the y faces to be flipped
 			bool edge = (voxA.distance < iso) != (voxB.distance < iso);
@@ -540,14 +427,14 @@ namespace OctreeGeneration {
 			}
 		}
 
-		bool GetCellOrNeighbourCell (int3 index, TerrainNode node, Dictionary<int3, TerrainNode> neighbours, int NodeVoxels, out Cell cell) {
+		bool GetCellOrNeighbourCell (int3 index, TerrainNode node, Dictionary<int3, TerrainNode> neighbours, out Cell cell) {
 			var neighbOffs = select(-1, 0, index >= 0);
-			neighbOffs = select(neighbOffs, +1, index >= NodeVoxels);
+			neighbOffs = select(neighbOffs, +1, index >= TerrainNode.VOXEL_COUNT);
 			
 			neighbours.TryGetValue(neighbOffs, out TerrainNode neighb);
 			
 			if (neighb == null || neighb.DCCells == null) {
-				if (any(index < 0) || any(index >= NodeVoxels) || node.DCCells == null) {
+				if (any(index < 0) || any(index >= TerrainNode.VOXEL_COUNT) || node.DCCells == null) {
 					cell = default;
 					return false;
 				}
@@ -560,33 +447,33 @@ namespace OctreeGeneration {
 				int a = 5;
 			}
 
-			int3 nodePos   = node  .coord.ToWorldCubeInt(NodeVoxels, out int nodeSize);
-			int3 neighbPos = neighb.coord.ToWorldCubeInt(NodeVoxels, out int neighbSize);
+			int3 nodePos   = node  .coord.ToWorldCubeInt(out int nodeSize);
+			int3 neighbPos = neighb.coord.ToWorldCubeInt(out int neighbSize);
 
 			int3 pos = index;
-			pos *= nodeSize / NodeVoxels;
+			pos *= nodeSize / TerrainNode.VOXEL_COUNT;
 			pos += nodePos - nodeSize/2;
 			pos -= neighbPos - neighbSize/2;
-			pos /= neighbSize / NodeVoxels;
+			pos /= neighbSize / TerrainNode.VOXEL_COUNT;
 			
 			cell = neighb.DCCells[pos.z, pos.y, pos.x];
 
 			if (!cell.active) {
 				// TODO: rare speacial case
 				cell = new Cell();
-				//CalcVertex(index, ref cell, node, NodeVoxels);
+				//CalcVertex(index, ref cell, node);
 				cell.active = true;
 				cell.vertex = (float3)pos + 0.5f;
 			}
 			
-			cell.vertex *= neighbSize / NodeVoxels;
+			cell.vertex *= neighbSize / TerrainNode.VOXEL_COUNT;
 			cell.vertex += neighbPos - neighbSize/2;
 			cell.vertex -= nodePos - nodeSize/2;
-			cell.vertex /= nodeSize / NodeVoxels;
+			cell.vertex /= nodeSize / TerrainNode.VOXEL_COUNT;
 			return true;
 		}
 
-		public void CalcNodeSeam (TerrainNode node, Dictionary<int3, TerrainNode> neighbours, float VoxelSize, int NodeVoxels) {
+		public void CalcNodeSeam (TerrainNode node, Dictionary<int3, TerrainNode> neighbours, float VoxelSize) {
 
 			vertices	= new List<Vector3>();
 			normals		= new List<Vector3>();
@@ -596,7 +483,7 @@ namespace OctreeGeneration {
 	
 			float iso = 0f;
 			
-			int ArraySize = NodeVoxels + 1;
+			int ArraySize = TerrainNode.VOXEL_COUNT + 1;
 			
 			cells = new Cell[NodeVoxels, NodeVoxels, NodeVoxels]; // assume zeroed
 			edges = new List<Edge>();
@@ -657,9 +544,9 @@ namespace OctreeGeneration {
 			//}
 
 			float nodeSize;
-			var nodePos = node.coord.ToWorldCube(VoxelSize, NodeVoxels, out nodeSize);
+			var nodePos = node.coord.ToWorldCube(VoxelSize, out nodeSize);
 			
-			float size = nodeSize / NodeVoxels;
+			float size = nodeSize / TerrainNode.VOXEL_COUNT;
 			float3 origin = nodeSize * -0.5f;
 			
 			for (int i=0; i<edges.Count; ++i) {
@@ -668,10 +555,10 @@ namespace OctreeGeneration {
 				var cell2Index = edges[i].GetCellIndex(2);
 				var cell3Index = edges[i].GetCellIndex(3);
 
-				bool cell0B = GetCellOrNeighbourCell(cell0Index, node, neighbours, NodeVoxels, out Cell cell0);
-				bool cell1B = GetCellOrNeighbourCell(cell1Index, node, neighbours, NodeVoxels, out Cell cell1);
-				bool cell2B = GetCellOrNeighbourCell(cell2Index, node, neighbours, NodeVoxels, out Cell cell2);
-				bool cell3B = GetCellOrNeighbourCell(cell3Index, node, neighbours, NodeVoxels, out Cell cell3);
+				bool cell0B = GetCellOrNeighbourCell(cell0Index, node, neighbours, out Cell cell0);
+				bool cell1B = GetCellOrNeighbourCell(cell1Index, node, neighbours, out Cell cell1);
+				bool cell2B = GetCellOrNeighbourCell(cell2Index, node, neighbours, out Cell cell2);
+				bool cell3B = GetCellOrNeighbourCell(cell3Index, node, neighbours, out Cell cell3);
 
 				if (cell0B && cell1B && cell2B && cell3B) {
 					if (edges[i].flipFace) {

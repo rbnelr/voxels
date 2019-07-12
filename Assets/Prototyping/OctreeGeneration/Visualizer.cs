@@ -20,7 +20,7 @@ namespace OctreeGeneration {
 		
 		public VisualizeType type = VisualizeType.Density;
 		
-		public TerrainGenerator generator;
+		public TerrainGeneratorStruct generator;
 
 		Texture2D texture;
 		
