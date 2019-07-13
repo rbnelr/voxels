@@ -50,12 +50,15 @@ namespace OctreeGeneration {
 
 		//public DualContouring.Cell[,,] DCCells;
 		
-		public int GetChildrenMask () {
+		public static int GetChildrenMask (TerrainNode[] children) {
 			int mask = 0;
 			for (int i=0; i<8; i++)
-				if (Children[i] != null)
+				if (children[i] != null)
 					mask |= 1 << i;
 			return mask;
+		}
+		public int GetChildrenMask () {
+			return GetChildrenMask(Children);
 		}
 
 		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {

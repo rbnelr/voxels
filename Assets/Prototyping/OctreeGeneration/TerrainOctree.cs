@@ -105,41 +105,15 @@ namespace OctreeGeneration {
 			if (root == null) {
 				considerOp( new CreateNodeOp(null, -1, MaxLod, -1, rootPos, rootSize) );
 			}
-
-			// Move Root node
-			if (root != null && any(rootPos != root.Pos)) {
-
-				var oldRoot = root;
-				root = createNode(MaxLod, rootPos, rootSize);
-				
-				Debug.Assert(oldRoot.Lod == root.Lod);
-				
-				// Keep old children subtrees
-				for (int i=0; i<8; ++i) {
-					int3 childIndx = TerrainNode.ChildOrder[i];
-					
-					int childLod = root.Lod - 1;
-					float childSize = root.Size / 2;
-					float3 childPos = root.Pos + (float3)childIndx * childSize;
-					
-					for (int j=0; j<8; ++j) {
-						if (oldRoot.Children[j] != null) {
-							Debug.Assert(oldRoot.Children[j].Lod == childLod);
-
-							if (all(oldRoot.Children[j].Pos == childPos)) {
-								root.Children[i] = oldRoot.Children[j];
-								oldRoot.Children[j] = null;
-								break;
-							}
-						}
-					}
-				}
-				
-				destroyNode(oldRoot);
+			
+			bool moveRoot = root != null && any(rootPos != root.Pos);
+			if (moveRoot) {
+				considerOp( new MoveRootOp(root, root.Lod, -1, rootPos) );
 			}
 
-			if (root != null)
+			if (root != null && !moveRoot) {
 				updateTreeRecurse(root);
+			}
 		}
 
 		void updateTreeRecurse (TerrainNode node) {
@@ -159,14 +133,6 @@ namespace OctreeGeneration {
 				int desiredLod = calcLod(dist);
 				
 				bool wantChild = desiredLod <= childLod;
-
-				//if (wantChild && child == null) {
-				//	child = createNode(childLod, childPos, childSize, node);
-				//}
-				//if (!wantChild && child != null) {
-				//	destroyNode(child);
-				//	child = null;
-				//}
 
 				if (wantChild && child == null) {
 					considerOp( new CreateNodeOp(node, i, childLod, dist, childPos, childSize) );
@@ -216,14 +182,14 @@ namespace OctreeGeneration {
 		AtomicTreeOperation curOp = null;
 		AtomicTreeOperation runningOp = null;
 		
-		int priotorizeNodes (AtomicTreeOperation l, AtomicTreeOperation r) {
+		int prioritizeNodes (AtomicTreeOperation l, AtomicTreeOperation r) {
 			int             order = (l is DeleteNodeOp ? 0:1).CompareTo(r is DeleteNodeOp ? 0:1); // priotorize deltions over creations since they're faster and we prevent unbounded node counts this way 
-			//if (order == 0) order = -l.lod .CompareTo(r.lod );
+			//if (order == 0) order = -l.lod .CompareTo(r.lod ); // dont prefer lods, just use distance
 			if (order == 0) order = l.dist.CompareTo(r.dist);
 			return order;
 		}
 		void considerOp (AtomicTreeOperation op) {
-			if (runningOp == null && (curOp == null || priotorizeNodes(op, curOp) < 0))
+			if (runningOp == null && (curOp == null || prioritizeNodes(op, curOp) < 0))
 				curOp = op;
 		}
 		void processAtomicTreeOp () {
@@ -346,6 +312,79 @@ namespace OctreeGeneration {
 			}
 			public override void Dispose () {
 				parentMeshingJob.Dispose();
+			}
+		}
+		
+		class MoveRootOp : AtomicTreeOperation {
+			readonly TerrainNode oldRoot;
+			readonly float3 newPos;
+
+			public override string ToString () {
+				return string.Format("Moving Root Node");
+			}
+
+			TerrainNode[] newChildren;
+
+			TerrainGenerator.GetVoxelsJob voxelsJob;
+			TerrainMesher.MeshingJob meshingJob;
+			
+			public MoveRootOp (TerrainNode oldRoot, int lod, float dist, float3 newPos) : base(lod, dist) {
+				this.oldRoot = oldRoot;
+				this.newPos = newPos;
+			}
+
+			TerrainNode[] getNewChildren () {
+				var children = new TerrainNode[8];
+				for (int i=0; i<8; ++i) {
+					int3 childIndx = TerrainNode.ChildOrder[i];
+					
+					float childSize = oldRoot.Size / 2;
+					float3 childPos = newPos + (float3)childIndx * childSize;
+					
+					for (int j=0; j<8; ++j) {
+						if (oldRoot.Children[j] != null && all(oldRoot.Children[j].Pos == childPos)) {
+							children[i] = oldRoot.Children[j];
+							break;
+						}
+					}
+				}
+				return children;
+			}
+			void moveChildren (TerrainNode newRoot) {
+				for (int i=0; i<8; ++i) {
+					if (newChildren.Contains(oldRoot.Children[i])) {
+						oldRoot.Children[i] = null; // remove child from old root so it won't be destroyed
+					}
+				}
+				newRoot.Children = newChildren;
+				destroyNode(oldRoot);
+			}
+
+			public override void Schedule (TerrainOctree octree) {
+				voxelsJob = octree.generator.GetVoxels(newPos, oldRoot.Size);
+				voxelsJob.Schedule();
+				
+				newChildren = getNewChildren();
+				int newChildrenMask = TerrainNode.GetChildrenMask(newChildren);
+
+				meshingJob = octree.mesher.MeshNode(oldRoot.Size, newChildrenMask, voxelsJob);
+				meshingJob.Schedule();
+			}
+			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted();
+			public override void Apply (TerrainOctree octree) {
+				var newRoot = octree.createNode(lod, newPos, oldRoot.Size);
+				octree.root = newRoot;
+
+				voxelsJob.Apply(newRoot);
+				meshingJob.Apply(newRoot);
+
+				moveChildren(newRoot);
+
+				Dispose();
+			}
+			public override void Dispose () {
+				voxelsJob.Dispose();
+				meshingJob.Dispose();
 			}
 		}
 		#endregion
