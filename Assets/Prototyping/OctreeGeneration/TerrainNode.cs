@@ -1,9 +1,9 @@
-﻿using static Unity.Mathematics.math;
+﻿using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using Unity.Collections;
-using System.Collections.Generic;
 using UnityEngine.Profiling;
+using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
 	public static class VoxelUtil {

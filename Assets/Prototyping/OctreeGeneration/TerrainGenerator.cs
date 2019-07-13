@@ -1,14 +1,12 @@
-﻿using Unity.Jobs;
-using Unity.Mathematics;
-using static Unity.Mathematics.math;
+﻿using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
-using System.Collections.Generic;
-using Unity.Burst;
 using UnityEngine.Profiling;
-using System.Collections.ObjectModel;
 using static NoiseExt;
 using static OctreeGeneration.VoxelUtil;
+using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
 	public struct Voxel {

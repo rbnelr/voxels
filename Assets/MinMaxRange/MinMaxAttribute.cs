@@ -7,8 +7,6 @@
 */
 
 using UnityEngine;
-using System.Collections;
-using System.Collections.Generic;
 
 public class MinMaxRangeAttribute : PropertyAttribute {
 	public float minLimit, maxLimit;

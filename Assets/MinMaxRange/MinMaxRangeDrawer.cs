@@ -12,8 +12,6 @@
 
 using UnityEngine;
 using UnityEditor;
-using System.Collections;
-using System.Collections.Generic;
 
 [CustomPropertyDrawer(typeof(MinMaxRangeAttribute))]
 public class MinMaxRangeDrawer : PropertyDrawer {

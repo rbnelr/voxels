@@ -1,17 +1,14 @@
-﻿using Unity.Jobs;
-using Unity.Mathematics;
-using static Unity.Mathematics.math;
+﻿using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
-using Unity.Burst;
-using System.Collections.Generic;
 using UnityEngine.Profiling;
-using System;
 using static OctreeGeneration.VoxelUtil;
-using System.Threading;
+using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
-	
+
 	public class TerrainMesher : MonoBehaviour {
 		
 		public float DCIterStrength = 1f;
@@ -27,6 +24,11 @@ namespace OctreeGeneration {
 		public MeshingJob MeshNode (float nodeSize, int childrenMask, Voxels voxels) {
 			return new MeshingJob(nodeSize, childrenMask, ISO, DCIterStrength, DCMaxIterations, voxels: voxels);
 		}
+
+		
+		//public SeamsMeshingJob MeshNodeSeams (TerrainNode[] neightbours, MeshingJob meshingJob) {
+		//	return new SeamsMeshingJob();
+		//}
 
 		public class MeshingJob : NodeOperation {
 			TerrainGenerator.GetVoxelsJob voxelsJob = null;
@@ -353,8 +355,6 @@ namespace OctreeGeneration {
 						}
 					}
 				}
-
-				int dbgCount = 0;
 				
 				// Calculate vertices positions
 				for (int z=0; z<TerrainNode.VOXEL_COUNT; ++z) {
@@ -373,15 +373,10 @@ namespace OctreeGeneration {
 
 								cell.vertex = vertex;
 								Cells[i] = cell;
-
-								dbgCount++;
 							}
 						}
 					}
 				}
-
-				//if (dbgCount > 0)
-				//	Thread.Sleep(100);
 				
 				float size = NodeSize / TerrainNode.VOXEL_COUNT;
 

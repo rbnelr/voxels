@@ -243,7 +243,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   VoxelSize: 1
-  MaxLod: 3
+  MaxLod: 9
   LodFuncStart: 0.7
   LodFuncEnd: 14
   LodFuncEndLod: 6
@@ -504,7 +504,7 @@ MonoBehaviour:
   MouselookAng:
     x: 0
     y: 0
-  TestFall: 0
+  TestFall: 1
   TestFallSpeed: -50
 --- !u!23 &1431956236
 MeshRenderer:

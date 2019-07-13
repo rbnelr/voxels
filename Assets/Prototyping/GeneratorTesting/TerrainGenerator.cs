@@ -1,10 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using CoherentNoise;
-using CoherentNoise.Generation;
-using CoherentNoise.Generation.Fractal;
-using CoherentNoise.Generation.Voronoi;
+﻿using UnityEngine;
 
 namespace GeneratorTesting {
 	public struct Voxel {

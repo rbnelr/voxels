@@ -1,11 +1,8 @@
-﻿using UnityEngine;
-using Unity.Mathematics;
-using System.Linq;
-using static Unity.Mathematics.math;
+﻿using System.Linq;
 using Unity.Collections;
-using System.Collections.Generic;
-using UnityEngine.Profiling;
-using System.Collections.ObjectModel;
+using Unity.Mathematics;
+using UnityEngine;
+using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
 	public abstract class NodeOperation {
@@ -246,23 +243,21 @@ namespace OctreeGeneration {
 			}
 			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted() && (parentMeshingJob?.IsCompleted() ?? true);
 			public override void Apply (TerrainOctree octree) {
-				if (parent?.IsDestroyed ?? false)
-					return; // can happen on root move
-				
-				var n = octree.createNode(lod, pos, size);
+				if (!(parent?.IsDestroyed ?? false)) { // if we want to rebuild the tree
+					var n = octree.createNode(lod, pos, size);
 
-				voxelsJob.Apply(n);
-				meshingJob.Apply(n);
-				parentMeshingJob?.Apply(parent);
+					voxelsJob.Apply(n);
+					meshingJob.Apply(n);
+					parentMeshingJob?.Apply(parent);
 
-				if (parent != null) {
-					Debug.Assert(parent.Children[childIndx] == null);
-					parent.Children[childIndx] = n;
-				} else {
-					Debug.Assert(octree.root == null);
-					octree.root = n;
+					if (parent != null) {
+						Debug.Assert(parent.Children[childIndx] == null);
+						parent.Children[childIndx] = n;
+					} else {
+						Debug.Assert(octree.root == null);
+						octree.root = n;
+					}
 				}
-
 				Dispose();
 			}
 			public override void Dispose () {
@@ -299,15 +294,13 @@ namespace OctreeGeneration {
 			}
 			public override bool IsCompleted () => true;
 			public override void Apply (TerrainOctree octree) {
-				if (parent.IsDestroyed)
-					return; // can happen on root move
-
-				destroyNode(parent.Children[childIndx]);
+				if (!parent.IsDestroyed) { // if we want to rebuild the tree
+					destroyNode(parent.Children[childIndx]);
 				
-				parentMeshingJob.Apply(parent);
+					parentMeshingJob.Apply(parent);
 
-				parent.Children[childIndx] = null;
-
+					parent.Children[childIndx] = null;
+				}
 				Dispose();
 			}
 			public override void Dispose () {
@@ -372,14 +365,15 @@ namespace OctreeGeneration {
 			}
 			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted();
 			public override void Apply (TerrainOctree octree) {
-				var newRoot = octree.createNode(lod, newPos, oldRoot.Size);
-				octree.root = newRoot;
+				if (!oldRoot.IsDestroyed) { // if we want to rebuild the tree
+					var newRoot = octree.createNode(lod, newPos, oldRoot.Size);
+					octree.root = newRoot;
 
-				voxelsJob.Apply(newRoot);
-				meshingJob.Apply(newRoot);
+					voxelsJob.Apply(newRoot);
+					meshingJob.Apply(newRoot);
 
-				moveChildren(newRoot);
-
+					moveChildren(newRoot);
+				}
 				Dispose();
 			}
 			public override void Dispose () {
