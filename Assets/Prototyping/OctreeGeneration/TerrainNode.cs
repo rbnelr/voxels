@@ -33,7 +33,9 @@ namespace OctreeGeneration {
 		// this represents the Terrain Octree, TerrainNodes are also cached, so TerrainNodes can exits outside the tree, they should be disabled in that case
 		public TerrainNode[] Children = new TerrainNode[8];
 
-		public static readonly int3[] ChildOrder = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
+		public static readonly int3[] ChildOctants = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
+		public static readonly int3[] ChildDirs = new int3[8] { int3(-1,-1,-1), int3(+1,-1,-1),  int3(-1,+1,-1), int3(+1,+1,-1),   int3(-1,-1,+1), int3(+1,-1,+1),  int3(-1,+1,+1), int3(+1,+1,+1) };
+
 		public TerrainNode GetChild (int3 octant) { // [0,1]
 			return Children[ octant.z * 4 + octant.y * 2 + octant.x ];
 		}
@@ -47,8 +49,7 @@ namespace OctreeGeneration {
 		public bool IsDestroyed => Go == null;
 
 		public Voxels Voxels;
-
-		//public DualContouring.Cell[,,] DCCells;
+		public Cells  Cells;
 		
 		public static int GetChildrenMask (TerrainNode[] children) {
 			int mask = 0;
@@ -60,6 +61,22 @@ namespace OctreeGeneration {
 		public int GetChildrenMask () {
 			return GetChildrenMask(Children);
 		}
+		
+		public static void GetNodesInDir (TerrainNode n, int3 dir, HashSet<TerrainNode> touching) {
+			touching.Add(n);
+
+			int3 dirMask = abs(dir);
+
+			for (int i=0; i<8; ++i) {
+				if (n.Children[i] != null && all((ChildDirs[i] * dirMask) == dir)) // any children in the dir
+					GetNodesInDir(n.Children[i], dir, touching);
+			}
+		} 
+		public HashSet<TerrainNode> GetNodesInDir (int3 dir) { // get nodes that are touching the face, edge or corner specified by dir (this node included) ([-1, 0, +1] for each axis, edge has 3 non zero components, edge has 2, face has 1)
+			var touching = new HashSet<TerrainNode>();
+			GetNodesInDir(this, dir, touching);
+			return touching;
+		} 
 
 		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {
 			this.Lod = lod;
@@ -104,7 +121,7 @@ namespace OctreeGeneration {
 		static List<Color>		colorsBuf    = new List<Color>();
 		static List<int>		trianglesBuf = new List<int>();
 
-		public static Mesh SetMesh (Mesh mesh, GameObject go, NativeList<float3> vertices, NativeList<float3> normals, NativeList<float2> uvs, NativeList<Color> colors, NativeList<int> triangles) {
+		public static Mesh SetMesh (Mesh mesh, GameObject go, ref TerrainMesher.Mesh mesherMesh) {
 
 			if (mesh == null) {
 				mesh = new Mesh();
@@ -116,19 +133,19 @@ namespace OctreeGeneration {
 			Profiler.BeginSample("TerrainNode.AssignMesh");
 			mesh.Clear();
 				Profiler.BeginSample("vertices");
-					mesh.SetVerticesNative(vertices, ref verticesBuf);
+					mesh.SetVerticesNative(mesherMesh.vertices, ref verticesBuf);
 				Profiler.EndSample();
 				Profiler.BeginSample("normals");
-					mesh.SetNormalsNative(normals, ref normalsBuf);
+					mesh.SetNormalsNative(mesherMesh.normals, ref normalsBuf);
 				Profiler.EndSample();
 				Profiler.BeginSample("uv");
-					mesh.SetUvsNative(0, uvs, ref uvBuf);
+					mesh.SetUvsNative(0, mesherMesh.uv, ref uvBuf);
 				Profiler.EndSample();
 				Profiler.BeginSample("colors");
-					mesh.SetColorsNative(colors, ref colorsBuf);
+					mesh.SetColorsNative(mesherMesh.colors, ref colorsBuf);
 				Profiler.EndSample();
 				Profiler.BeginSample("triangles");
-					mesh.SetTrianglesNative(triangles, 0, ref trianglesBuf);
+					mesh.SetTrianglesNative(mesherMesh.triangles, 0, ref trianglesBuf);
 				Profiler.EndSample();
 			Profiler.EndSample();
 

@@ -250,6 +250,7 @@ MonoBehaviour:
   TerrainNodePrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
     type: 3}
   player: {fileID: 1431956234}
+  test: {fileID: 942743130}
   AlwaysDrawOctree: 1
 --- !u!4 &914998217
 Transform:
@@ -461,7 +462,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 942743130}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -304, y: 16.345, z: -79.99}
+  m_LocalPosition: {x: 19.721, y: 18.7, z: -10.477}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -504,7 +505,7 @@ MonoBehaviour:
   MouselookAng:
     x: 0
     y: 0
-  TestFall: 1
+  TestFall: 0
   TestFallSpeed: -50
 --- !u!23 &1431956236
 MeshRenderer:

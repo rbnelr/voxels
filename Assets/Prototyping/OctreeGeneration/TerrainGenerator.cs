@@ -171,7 +171,7 @@ namespace OctreeGeneration {
 		
 		TerrainGeneratorStruct terrainGenerator = new TerrainGeneratorStruct();
 		
-		public GetVoxelsJob GetVoxels (float3 nodePos, float nodeSize) {
+		public GetVoxelsJob SheduleGetVoxels (float3 nodePos, float nodeSize) {
 			return new GetVoxelsJob(nodePos, nodeSize, terrainGenerator);
 		}
 
@@ -195,7 +195,7 @@ namespace OctreeGeneration {
 			}
 		}
 
-		public class GetVoxelsJob : NodeOperation {
+		public class GetVoxelsJob {
 			public Voxels Voxels;
 			public JobHandle? JobHandle;
 			Job job;
@@ -206,9 +206,6 @@ namespace OctreeGeneration {
 					NodeSize = size,
 					Gen = gen,
 				};
-			}
-			public override void Schedule () {
-				Profiler.BeginSample("GetVoxelsJob.Schedule()");
 
 				int ArraySize = TerrainNode.VOXEL_COUNT + 1;
 				int voxelsLength = ArraySize * ArraySize * ArraySize;
@@ -219,11 +216,9 @@ namespace OctreeGeneration {
 				job.voxels = Voxels.native;
 
 				JobHandle = job.Schedule(voxelsLength, ArraySize);
-				
-				Profiler.EndSample();
 			}
-			public override bool IsCompleted () => JobHandle.Value.IsCompleted;
-			public override void Apply (TerrainNode node) {
+			public bool IsCompleted () => JobHandle.Value.IsCompleted;
+			public void Apply (TerrainNode node) {
 				JobHandle.Value.Complete();
 
 				node.SetVoxels(Voxels);
@@ -231,7 +226,7 @@ namespace OctreeGeneration {
 				Dispose();
 			}
 
-			public override void Dispose () {
+			public void Dispose () {
 				if (JobHandle != null) {
 					JobHandle.Value.Complete();
 					
