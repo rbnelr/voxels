@@ -21,94 +21,54 @@ namespace OctreeGeneration {
 			return _3dIndex;
 		}
 	}
-
-	/// <summary>
-	/// Used to uniquely identify octree nodes
-	/// </summary>
-	public struct OctreeCoord : System.IEquatable<OctreeCoord> {
-		public readonly int		lod;
-		public readonly int3	pos; // in voxel space, ie. worldPos / VoxelSize
-		
-		public int3	size => TerrainNode.VOXEL_COUNT << lod; // in voxel space, ie. worldSize / VoxelSize
-
-		public OctreeCoord (int lod, int3 pos) {
-			this.lod = lod;
-			this.pos = pos;
-		}
-			
-		public override string ToString () {
-			return string.Format("({0}, ({1}, {2}, {3}))", lod, pos.x, pos.y, pos.z);
-		}
-		
-		// Needed to be used as Hashmap key
-		bool System.IEquatable<OctreeCoord>.Equals(OctreeCoord r) {
-			return lod == r.lod && all(pos == r.pos);
-		}
-		public override int GetHashCode () {
-			// https://stackoverflow.com/questions/1646807/quick-and-simple-hash-code-combinations
-			int h = 1009;
-			h = (h * 9176) + lod;
-			h = (h * 9176) + pos.GetHashCode();
-			return h;
-		}
-		
-		public static bool operator== (OctreeCoord l, OctreeCoord r) {
-			return l.lod == r.lod && all(l.pos == r.pos);
-		}
-		public static bool operator!= (OctreeCoord l, OctreeCoord r) {
-			return l.lod != r.lod || any(l.pos != r.pos);
-		}
-		
-		public override bool Equals (object obj) { // SLOW to call because it boxes OctreeCoord
-			if (obj == null || GetType() != obj.GetType())
-				return false;
-		
-			return this == (OctreeCoord)obj;
-		}
-	};
 	
-	/// <summary>
-	/// A Node in the terrain octree
-	/// Its location is immutable
-	/// Exists inside the octree, never outside
-	/// Is incomplete when created, since voxel and mesh creation are async, always gets created in the tree when the async ops are sheduled, since neighbourship queries are needed for the seam creation, which are really hard without a tree
-	/// Actual game object gets only created when as soon as the mesh is done
-	/// </summary>
 	public class TerrainNode {
 		public const int VOXEL_COUNT = 32;
 
-		 // TerrainNode has a fixed location after it is created
-		public readonly OctreeCoord Coord;
+		// TerrainNode has a fixed location after it is created
+		public readonly int Lod;
 		public readonly float3 Pos; // lower corner not center
 		public readonly float Size;
 
-		public int Lod => Coord.lod;
 		public float3 Center => Pos + Size/2;
 		
 		public TerrainNode[] Children = new TerrainNode[8];
 
-
+		// Gameobjects always instanciated
 		public GameObject Go;
-		public Mesh mesh = null;
-
 		public GameObject SeamGo;
+		public Mesh mesh = null;
 		public Mesh SeamMesh = null;
 
-		public bool IsDestroyed => Go == null;
+		public Voxels Voxels = null;
+		//public TerrainMesher.DualContouring.Data DC;
 
-		public Voxels Voxels;
-		public Cells  Cells;
-		
+		public bool IsDestroyed => Go == null; // Node was destroyed and removed from the tree, should no longer be used (this can be observed true when nodes are destroyed while still being used by a job for ex.)
+		public bool IsCreated => Voxels != null; // if false => this node was put into the tree, but does not have voxels or a mesh yet
+
 		public static readonly int3[] ChildOctants = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
 		public static readonly int3[] ChildDirs = new int3[8] { int3(-1,-1,-1), int3(+1,-1,-1),  int3(-1,+1,-1), int3(+1,+1,-1),   int3(-1,-1,+1), int3(+1,-1,+1),  int3(-1,+1,+1), int3(+1,+1,+1) };
 		
-		public TerrainNode (OctreeCoord coord, float VoxelSize) {
+		public TerrainNode (int lod, float3 pos, float size, GameObject TerrainNodePrefab, Transform goHierachy) {
 			this.Lod = lod;
 			this.Pos = pos;
 			this.Size = size;
 			
 			Go = Object.Instantiate(TerrainNodePrefab, pos, Quaternion.identity, goHierachy);
 			SeamGo = Go.transform.Find("Seam").gameObject;
+
+			{
+				mesh = new Mesh();
+				mesh.name = "TerrainNode Mesh";
+				mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+				Go.GetComponent<MeshFilter>().mesh = mesh;
+			}
+			{
+				SeamMesh = new Mesh();
+				SeamMesh.name = "TerrainNode Seam Mesh";
+				SeamMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+				SeamGo.GetComponent<MeshFilter>().mesh = SeamMesh;
+			}
 		}
 
 		public TerrainNode GetChild (int3 octant) { // [0,1]
@@ -117,9 +77,10 @@ namespace OctreeGeneration {
 		
 		public static int GetChildrenMask (TerrainNode[] children) {
 			int mask = 0;
-			for (int i=0; i<8; i++)
-				if (children[i] != null)
+			for (int i=0; i<8; i++) {
+				if (children[i]?.IsCreated ?? false)
 					mask |= 1 << i;
+			}
 			return mask;
 		}
 		public int GetChildrenMask () {
@@ -168,43 +129,6 @@ namespace OctreeGeneration {
 				this.Voxels.DecRef();
 
 			this.Voxels = voxels;
-		}
-		
-		static List<Vector3>	verticesBuf  = new List<Vector3>();
-		static List<Vector3>	normalsBuf   = new List<Vector3>();
-		static List<Vector2>	uvBuf        = new List<Vector2>();
-		static List<Color>		colorsBuf    = new List<Color>();
-		static List<int>		trianglesBuf = new List<int>();
-
-		public static Mesh SetMesh (Mesh mesh, GameObject go, ref TerrainMesher.Mesh mesherMesh) {
-
-			if (mesh == null) {
-				mesh = new Mesh();
-				mesh.name = "TerrainNode Mesh";
-				mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-				go.GetComponent<MeshFilter>().mesh = mesh;
-			}
-
-			Profiler.BeginSample("TerrainNode.AssignMesh");
-			mesh.Clear();
-				Profiler.BeginSample("vertices");
-					mesh.SetVerticesNative(mesherMesh.vertices, ref verticesBuf);
-				Profiler.EndSample();
-				Profiler.BeginSample("normals");
-					mesh.SetNormalsNative(mesherMesh.normals, ref normalsBuf);
-				Profiler.EndSample();
-				Profiler.BeginSample("uv");
-					mesh.SetUvsNative(0, mesherMesh.uv, ref uvBuf);
-				Profiler.EndSample();
-				Profiler.BeginSample("colors");
-					mesh.SetColorsNative(mesherMesh.colors, ref colorsBuf);
-				Profiler.EndSample();
-				Profiler.BeginSample("triangles");
-					mesh.SetTrianglesNative(mesherMesh.triangles, 0, ref trianglesBuf);
-				Profiler.EndSample();
-			Profiler.EndSample();
-
-			return mesh;
 		}
 	}
 }

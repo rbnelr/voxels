@@ -16,6 +16,7 @@ namespace OctreeGeneration {
 		}
 
 		public abstract void Schedule (TerrainOctree octree);
+		public abstract bool CanCompleteInstantly ();
 		public abstract bool IsCompleted ();
 		public abstract void Apply (TerrainOctree octree);
 		public abstract void Dispose ();
@@ -97,7 +98,7 @@ namespace OctreeGeneration {
 			rootPos = (floor(playerPos / (rootSize / 2) + 0.5f) - 1f) * (rootSize / 2); // snap root node in a grid half its size so that is contains the player
 
 			if (root == null) {
-				considerOp( new CreateNodeOp(null, -1, MaxLod, -1, rootPos, rootSize) );
+				root = createNode(MaxLod, rootPos, rootSize);
 			}
 			
 			bool moveRoot = root != null && any(rootPos != root.Pos);
@@ -111,8 +112,12 @@ namespace OctreeGeneration {
 		}
 
 		void updateTreeRecurse (TerrainNode node) {
-			Debug.Assert(node != null && !node.IsDestroyed);
+			UnityEngine.Assertions.Assert.IsTrue(node != null && !node.IsDestroyed);
 			
+			if (!node.IsCreated) {
+				considerOp( new CreateNodeOp(node, -1, node.Lod, 0, node) );
+			}
+
 			_countNodes++;
 			
 			for (int i=0; i<8; ++i) {
@@ -129,8 +134,9 @@ namespace OctreeGeneration {
 				bool wantChild = desiredLod <= childLod;
 
 				if (wantChild && child == null) {
-					considerOp( new CreateNodeOp(node, i, childLod, dist, childPos, childSize) );
+					child = node.Children[i] = createNode(childLod, childPos, childSize);
 				}
+
 				if (!wantChild && child != null) {
 					considerOp( new DeleteNodeOp(node, i, childLod, dist) );
 				}
@@ -161,7 +167,7 @@ namespace OctreeGeneration {
 		}
 
 		void OnDestroy () {
-			Debug.Assert(curOp == null);
+			UnityEngine.Assertions.Assert.IsTrue(curOp == null);
 
 			if (runningOp != null)
 				runningOp.Dispose();
@@ -178,13 +184,20 @@ namespace OctreeGeneration {
 		
 		int prioritizeNodes (AtomicTreeOperation l, AtomicTreeOperation r) {
 			int             order = (l is DeleteNodeOp ? 0:1).CompareTo(r is DeleteNodeOp ? 0:1); // priotorize deltions over creations since they're faster and we prevent unbounded node counts this way 
-			//if (order == 0) order = -l.lod .CompareTo(r.lod ); // dont prefer lods, just use distance
+			if (order == 0) order = l.lod .CompareTo(r.lod ); // dont prefer lods, just use distance
 			if (order == 0) order = l.dist.CompareTo(r.dist);
 			return order;
 		}
 		void considerOp (AtomicTreeOperation op) {
-			if (runningOp == null && (curOp == null || prioritizeNodes(op, curOp) < 0))
+			if (runningOp == null && (curOp == null || prioritizeNodes(op, curOp) < 0)) {
 				curOp = op;
+
+				if (curOp.CanCompleteInstantly()) { // Try to apply operation instantly if possible
+					curOp.Schedule(this);
+					curOp.Apply(this);
+					curOp = null;
+				}
+			}
 		}
 		void processAtomicTreeOp () {
 			if (curOp != null) {
@@ -203,70 +216,71 @@ namespace OctreeGeneration {
 		class CreateNodeOp : AtomicTreeOperation {
 			readonly TerrainNode parent;
 			readonly int childIndx;
-			readonly float3 pos;
-			readonly float size;
+			readonly TerrainNode node;
 
 			public override string ToString () {
-				var coord = (int3)round(pos / size);
-				return string.Format("Creating Node (#{0:2} {1:2}:{2:2})", lod, coord.x, coord.y, coord.z);
+				var coord = (int3)round(node.Pos / node.Size);
+				return string.Format("Creating Node (#{0} {1},{2},{3})", lod, coord.x, coord.y, coord.z);
 			}
 
 			TerrainGenerator.GetVoxelsJob voxelsJob;
 			TerrainMesher.MeshingJob meshingJob;
 			TerrainMesher.MeshingJob parentMeshingJob;
-			TerrainMesher.SeamMeshingJob[] seamJobs;
+			//TerrainMesher.SeamMeshingJob[] seamJobs;
 			
-			public CreateNodeOp (TerrainNode parent, int childIndx, int lod, float dist, float3 pos, float size) : base(lod, dist) {
+			public CreateNodeOp (TerrainNode parent, int childIndx, int lod, float dist, TerrainNode node) : base(lod, dist) {
 				this.parent = parent;
 				this.childIndx = childIndx;
-				this.pos = pos;
-				this.size = size;
+				this.node = node;
 			}
 
 			public override void Schedule (TerrainOctree octree) {
-				voxelsJob = octree.generator.SheduleGetVoxels(pos, size);
+				voxelsJob = octree.generator.SheduleGetVoxels(node.Pos, node.Size);
 				
-				meshingJob = octree.mesher.SheduleMeshNode(size, 0, voxelsJob);
+				meshingJob = octree.mesher.SheduleMeshNode(node.Size, node.GetChildrenMask(), voxelsJob);
 
-				if (parent != null) {
+				if (parent != null && parent.IsCreated) {
 					int childrenMask = parent.GetChildrenMask();
-					Debug.Assert((childrenMask & (1 << childIndx)) == 0);
+					UnityEngine.Assertions.Assert.IsTrue((childrenMask & (1 << childIndx)) == 0);
 					childrenMask |= 1 << childIndx;
 				
 					parentMeshingJob = octree.mesher.SheduleMeshNode(parent.Size, childrenMask, parent.Voxels);
 				}
 				
-				var seams = new List<TerrainMesher.SeamMeshingJob>();
-				{
-					var job = octree.mesher.SheduleMeshSeam(octree, pos, size, lod, meshingJob);
-					seams.Add(job);
-				}
-				foreach (var n in octree.GetAllTouchingNodesForCreateNode(pos, size, lod)) {
-					var job = octree.mesher.SheduleMeshSeam(octree, n.Pos, n.Size, n.Lod, meshingJob);
-					seams.Add(job);
-				}
-
-				seamJobs = seams.ToArray();
+				//var seams = new List<TerrainMesher.SeamMeshingJob>();
+				//{
+				//	var job = octree.mesher.SheduleMeshSeam(octree, node.Pos, node.Size, lod, meshingJob);
+				//	seams.Add(job);
+				//}
+				//foreach (var n in octree.GetAllTouchingNodesForCreateNode(node.Pos, node.Size, lod)) {
+				//	var job = octree.mesher.SheduleMeshSeam(octree, n.Pos, n.Size, n.Lod, meshingJob);
+				//	seams.Add(job);
+				//}
+				//
+				//seamJobs = seams.ToArray();
 			}
-			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted() && (parentMeshingJob?.IsCompleted() ?? true) && seamJobs.All(x => x.IsCompleted());
+			public override bool CanCompleteInstantly () => false;
+			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted() && (parentMeshingJob?.IsCompleted() ?? true)
+				//&& seamJobs.All(x => x.IsCompleted())
+				;
 			public override void Apply (TerrainOctree octree) {
-				if (!(parent?.IsDestroyed ?? false)) { // if we want to rebuild the tree
-					var n = octree.createNode(lod, pos, size);
+				if (!node.IsDestroyed) { // if we want to rebuild the tree
+					Debug.Assert(!(parent?.IsDestroyed ?? false));
 
-					voxelsJob.Apply(n);
-					meshingJob.Apply(n);
+					voxelsJob.Apply(node);
+					meshingJob.Apply(node);
 					parentMeshingJob?.Apply(parent);
 
 					if (parent != null) {
-						Debug.Assert(parent.Children[childIndx] == null);
-						parent.Children[childIndx] = n;
+						//Debug.Assert(parent.Children[childIndx] == null);
+						//parent.Children[childIndx] = n;
 					} else {
-						Debug.Assert(octree.root == null);
-						octree.root = n;
+						Debug.Assert(octree.root == node);
+						//octree.root = n;
 					}
 
-					foreach (var j in seamJobs)
-						j.Apply();
+					//foreach (var j in seamJobs)
+					//	j.Apply();
 				}
 				Dispose();
 			}
@@ -279,6 +293,7 @@ namespace OctreeGeneration {
 
 		class DeleteNodeOp : AtomicTreeOperation {
 			readonly TerrainNode parent;
+			readonly TerrainNode node;
 			readonly int childIndx;
 
 			TerrainMesher.MeshingJob parentMeshingJob;
@@ -293,27 +308,31 @@ namespace OctreeGeneration {
 			public DeleteNodeOp (TerrainNode parent, int childIndx, int lod, float dist) : base(lod, dist) {
 				this.parent = parent;
 				this.childIndx = childIndx;
+				node = parent.Children[childIndx];
+				UnityEngine.Assertions.Assert.IsTrue(node != null);
 			}
 			public override void Schedule (TerrainOctree octree) {
-				int childrenMask = parent.GetChildrenMask();
-				Debug.Assert((childrenMask & (1 << childIndx)) != 0);
-				childrenMask &= ~(1 << childIndx);
+				if (parent.IsCreated && node.IsCreated) {
+					int childrenMask = parent.GetChildrenMask();
+					UnityEngine.Assertions.Assert.IsTrue((childrenMask & (1 << childIndx)) != 0);
+					childrenMask &= ~(1 << childIndx);
 				
-				parentMeshingJob = octree.mesher.SheduleMeshNode(parent.Size, childrenMask, parent.Voxels);
-			}
-			public override bool IsCompleted () => true;
-			public override void Apply (TerrainOctree octree) {
-				if (!parent.IsDestroyed) { // if we want to rebuild the tree
-					destroyNode(parent.Children[childIndx]);
-				
-					parentMeshingJob.Apply(parent);
-
-					parent.Children[childIndx] = null;
+					parentMeshingJob = octree.mesher.SheduleMeshNode(parent.Size, childrenMask, parent.Voxels);
 				}
+			}
+			public override bool CanCompleteInstantly () => !(parent.IsCreated && node.IsCreated);
+			public override bool IsCompleted () => (parentMeshingJob?.IsCompleted() ?? true);
+			public override void Apply (TerrainOctree octree) {
+				if (!parent.IsDestroyed) {
+					destroyNode(parent.Children[childIndx]);
+				}
+				parentMeshingJob?.Apply(parent);
+
+				parent.Children[childIndx] = null;
 				Dispose();
 			}
 			public override void Dispose () {
-				parentMeshingJob.Dispose();
+				parentMeshingJob?.Dispose();
 			}
 		}
 		
@@ -370,6 +389,7 @@ namespace OctreeGeneration {
 
 				meshingJob = octree.mesher.SheduleMeshNode(oldRoot.Size, newChildrenMask, voxelsJob);
 			}
+			public override bool CanCompleteInstantly () => false;
 			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted();
 			public override void Apply (TerrainOctree octree) {
 				if (!oldRoot.IsDestroyed) { // if we want to rebuild the tree
@@ -427,59 +447,59 @@ namespace OctreeGeneration {
 		}
 
 		//
-		class VirtualNode {
-			public float3	pos;
-			public float	size;
-			public int		lod;
-
-			public Voxels	voxels;
-			public Cells	cells;
-		};
-		TerrainNode _lookupOctreeForCreateNode (TerrainNode n, float3 nodePos, int nodeLod, float3 worldPos, int minLod) {
-			if (n.Lod < minLod)
-				return null;
-			
-			var pos = worldPos;
-			pos -= n.Pos;
-			pos /= n.Size/2;
-			var posChild = (int3)floor(pos);
-
-			if (all(posChild >= 0 & posChild <= 1)) {
-				
-				var child = n.GetChild(posChild);
-				if (child != null) {
-					var childLookup = _lookupOctreeForCreateNode(child, nodePos, nodeLod, worldPos, minLod);
-					if (childLookup != null)	
-						return childLookup; // in child octant
-				} else if ((n.Lod - 1) == nodeLod && all(posChild == nodePos)) {
-					return 
-				}
-				return n; // in octant that does not have a child
-			} else {
-				return null; // not in this Nodes octants
-			}
-		}
-		public TerrainNode LookupOctreeForCreateNode (float3 nodePos, int nodeLod, float3 worldPos, int minLod=-1) { // Octree lookup which smallest Node contains the world space postion
-			if (root == null) return null;
-			return _lookupOctreeForCreateNode(root, nodePos, nodeLod, worldPos, minLod);
-		}
-
-		public TerrainNode GetNeighbourTreeForCreateNode (TerrainNode n, float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
-			var posInNeighbour = n.Pos + n.Size/2 + (float3)dir * (n.Size + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
-			
-			Gizmos.color = Color.yellow;
-			Gizmos.DrawWireCube(posInNeighbour, (float3)1);
-
-			return LookupOctreeForCreateNode(nodePos, nodeSize, nodeLod, posInNeighbour, nodeLod);
-		}
-		public TerrainNode GetNeighbourTreeForCreateNode (float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
-			var posInNeighbour = nodePos + nodeSize/2 + (float3)dir * (nodeSize + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
-
-			Gizmos.color = Color.yellow;
-			Gizmos.DrawWireCube(posInNeighbour, (float3)1);
-
-			return LookupOctree(posInNeighbour, nodeLod);
-		}
+		//class VirtualNode {
+		//	public float3	pos;
+		//	public float	size;
+		//	public int		lod;
+		//
+		//	public Voxels	voxels;
+		//	public Cells	cells;
+		//};
+		//TerrainNode _lookupOctreeForCreateNode (TerrainNode n, float3 nodePos, int nodeLod, float3 worldPos, int minLod) {
+		//	if (n.Lod < minLod)
+		//		return null;
+		//	
+		//	var pos = worldPos;
+		//	pos -= n.Pos;
+		//	pos /= n.Size/2;
+		//	var posChild = (int3)floor(pos);
+		//
+		//	if (all(posChild >= 0 & posChild <= 1)) {
+		//		
+		//		var child = n.GetChild(posChild);
+		//		if (child != null) {
+		//			var childLookup = _lookupOctreeForCreateNode(child, nodePos, nodeLod, worldPos, minLod);
+		//			if (childLookup != null)	
+		//				return childLookup; // in child octant
+		//		} else if ((n.Lod - 1) == nodeLod && all(posChild == nodePos)) {
+		//			return 
+		//		}
+		//		return n; // in octant that does not have a child
+		//	} else {
+		//		return null; // not in this Nodes octants
+		//	}
+		//}
+		//public TerrainNode LookupOctreeForCreateNode (float3 nodePos, int nodeLod, float3 worldPos, int minLod=-1) { // Octree lookup which smallest Node contains the world space postion
+		//	if (root == null) return null;
+		//	return _lookupOctreeForCreateNode(root, nodePos, nodeLod, worldPos, minLod);
+		//}
+		//
+		//public TerrainNode GetNeighbourTreeForCreateNode (TerrainNode n, float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
+		//	var posInNeighbour = n.Pos + n.Size/2 + (float3)dir * (n.Size + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
+		//	
+		//	Gizmos.color = Color.yellow;
+		//	Gizmos.DrawWireCube(posInNeighbour, (float3)1);
+		//
+		//	return LookupOctreeForCreateNode(nodePos, nodeSize, nodeLod, posInNeighbour, nodeLod);
+		//}
+		//public TerrainNode GetNeighbourTreeForCreateNode (float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
+		//	var posInNeighbour = nodePos + nodeSize/2 + (float3)dir * (nodeSize + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
+		//
+		//	Gizmos.color = Color.yellow;
+		//	Gizmos.DrawWireCube(posInNeighbour, (float3)1);
+		//
+		//	return LookupOctree(posInNeighbour, nodeLod);
+		//}
 
 		public static readonly int3[] NeighbourDirs = new int3[] {
 			int3(-1,-1,-1), int3( 0,-1,-1), int3(+1,-1,-1),
@@ -524,24 +544,24 @@ namespace OctreeGeneration {
 
 			return touching;
 		}
-		HashSet<TerrainNode> GetAllTouchingNodesForCreateNode (float3 nodePos, float nodeSize, int nodeLod) {
-			var touching = new HashSet<TerrainNode>();
-			
-			for (int i=0; i<NeighbourDirs.Length; ++i) {
-				int3 dir = NeighbourDirs[i];
-
-				var neigh = GetNeighbourTreeForCreateNode(nodePos, nodeSize, nodeLod, dir);
-				if (neigh != null) {
-					if (neigh.Lod > nodeLod) {
-						touching.Add(neigh);
-					} else {
-						TerrainNode.GetNodesInDir(neigh, -dir, touching);
-					}
-				}
-			}
-
-			return touching;
-		}
+		//HashSet<TerrainNode> GetAllTouchingNodesForCreateNode (float3 nodePos, float nodeSize, int nodeLod) {
+		//	var touching = new HashSet<TerrainNode>();
+		//	
+		//	for (int i=0; i<NeighbourDirs.Length; ++i) {
+		//		int3 dir = NeighbourDirs[i];
+		//
+		//		var neigh = GetNeighbourTreeForCreateNode(nodePos, nodeSize, nodeLod, dir);
+		//		if (neigh != null) {
+		//			if (neigh.Lod > nodeLod) {
+		//				touching.Add(neigh);
+		//			} else {
+		//				TerrainNode.GetNodesInDir(neigh, -dir, touching);
+		//			}
+		//		}
+		//	}
+		//
+		//	return touching;
+		//}
 		#endregion
 
 		#region Debug Visualizations
@@ -552,7 +572,7 @@ namespace OctreeGeneration {
 
 		void drawTree (TerrainNode n) {
 			Gizmos.color = _GetLodColor(n.Lod);
-			Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size);
+			Gizmos.DrawWireCube(n.Center, n.IsCreated ? (float3)n.Size : (float3)n.Size / 3);
 			
 			//if (n.voxels != null)
 			//	Gizmos.DrawWireCube(n.pos + n.size/2, (float3)n.size * 0.96f);
@@ -563,23 +583,23 @@ namespace OctreeGeneration {
 			}
 		}
 		void drawOctree () {
-			//if (root != null)
-			//	drawTree(root);
+			if (root != null)
+				drawTree(root);
 
-			if (test != null) {
-				var testN = LookupOctree(testPos);
-				
-				if (testN != null) {
-					var touching = GetAllTouchingNodes(testN);
-					foreach (var n in touching) {
-						Gizmos.color = Color.yellow;
-						Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size * 0.99f);
-					}
-
-					Gizmos.color = Color.red;
-					Gizmos.DrawWireCube(testN.Pos + testN.Size/2, (float3)testN.Size * 0.99f);
-				}
-			}
+			//if (test != null) {
+			//	var testN = LookupOctree(testPos);
+			//	
+			//	if (testN != null) {
+			//		var touching = GetAllTouchingNodes(testN);
+			//		foreach (var n in touching) {
+			//			Gizmos.color = Color.yellow;
+			//			Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size * 0.99f);
+			//		}
+			//
+			//		Gizmos.color = Color.red;
+			//		Gizmos.DrawWireCube(testN.Pos + testN.Size/2, (float3)testN.Size * 0.99f);
+			//	}
+			//}
 		}
 
 		void OnDrawGizmosSelected () {
