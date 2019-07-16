@@ -106,16 +106,18 @@ namespace OctreeGeneration {
 				considerOp( new MoveRootOp(root, root.Lod, -1, rootPos) );
 			}
 
-			if (root != null && !moveRoot) {
+			if (root != null) {
+				if (!root.IsCreated) {
+					considerOp( new CreateNodeOp(root.Lod, 0, root, null, -1) );
+				}
 				updateTreeRecurse(root);
 			}
 		}
 
 		void updateTreeRecurse (TerrainNode node) {
-			UnityEngine.Assertions.Assert.IsTrue(node != null && !node.IsDestroyed);
-			
-			if (!node.IsCreated) {
-				considerOp( new CreateNodeOp(node, -1, node.Lod, 0, node) );
+			bool cond = node != null && !node.IsDestroyed;
+			if (!cond) {
+				UnityEngine.Assertions.Assert.IsTrue(cond, "wtf");
 			}
 
 			_countNodes++;
@@ -136,13 +138,21 @@ namespace OctreeGeneration {
 				if (wantChild && child == null) {
 					child = node.Children[i] = createNode(childLod, childPos, childSize);
 				}
-
-				if (!wantChild && child != null) {
-					considerOp( new DeleteNodeOp(node, i, childLod, dist) );
+				
+				if (child != null) {
+					if (!child.IsCreated) {
+						considerOp( new CreateNodeOp(childLod, dist, child, node, i) );
+					}
+					if (!wantChild) {
+						considerOp( new DeleteNodeOp(childLod, dist, child, node, i) );
+					}
+					
+					child = node.Children[i]; // delete op might execute instantly, child should be null then
 				}
-
-				if (child != null && wantChild)
+					
+				if (child != null) {
 					updateTreeRecurse(child);
+				}
 			}
 		}
 
@@ -182,9 +192,17 @@ namespace OctreeGeneration {
 		AtomicTreeOperation curOp = null;
 		AtomicTreeOperation runningOp = null;
 		
+		int prioritizeOpType (AtomicTreeOperation op) {
+			// prioritize deltions over creations since they're faster and we prevent unbounded node counts this way 
+			// prioritize root moves over everything else
+			if (op is MoveRootOp) return 0;
+			if (op is DeleteNodeOp) return 1;
+			if (op is CreateNodeOp) return 2;
+			return 3;
+		}
 		int prioritizeNodes (AtomicTreeOperation l, AtomicTreeOperation r) {
-			int             order = (l is DeleteNodeOp ? 0:1).CompareTo(r is DeleteNodeOp ? 0:1); // priotorize deltions over creations since they're faster and we prevent unbounded node counts this way 
-			if (order == 0) order = l.lod .CompareTo(r.lod ); // dont prefer lods, just use distance
+			int             order = prioritizeOpType(l).CompareTo(prioritizeOpType(r));
+			if (order == 0) order = l.lod .CompareTo(r.lod ) * (l is DeleteNodeOp ? -1 : 1); // prefer deleting higher lods first for delete ops, since we always delete the whole subtree at once
 			if (order == 0) order = l.dist.CompareTo(r.dist);
 			return order;
 		}
@@ -208,15 +226,17 @@ namespace OctreeGeneration {
 		}
 		void applyAtomicTreeOp () {
 			if (runningOp != null && runningOp.IsCompleted()) {
+				Debug.Log("Applying atomic tree OP "+ runningOp.ToString());
+
 				runningOp.Apply(this);
 				runningOp = null;
 			}
 		}
 
 		class CreateNodeOp : AtomicTreeOperation {
+			readonly TerrainNode node;
 			readonly TerrainNode parent;
 			readonly int childIndx;
-			readonly TerrainNode node;
 
 			public override string ToString () {
 				var coord = (int3)round(node.Pos / node.Size);
@@ -228,10 +248,10 @@ namespace OctreeGeneration {
 			TerrainMesher.MeshingJob parentMeshingJob;
 			//TerrainMesher.SeamMeshingJob[] seamJobs;
 			
-			public CreateNodeOp (TerrainNode parent, int childIndx, int lod, float dist, TerrainNode node) : base(lod, dist) {
+			public CreateNodeOp (int lod, float dist, TerrainNode node, TerrainNode parent, int childIndx) : base(lod, dist) {
+				this.node = node;
 				this.parent = parent;
 				this.childIndx = childIndx;
-				this.node = node;
 			}
 
 			public override void Schedule (TerrainOctree octree) {
@@ -292,8 +312,8 @@ namespace OctreeGeneration {
 		}
 
 		class DeleteNodeOp : AtomicTreeOperation {
-			readonly TerrainNode parent;
 			readonly TerrainNode node;
+			readonly TerrainNode parent;
 			readonly int childIndx;
 
 			TerrainMesher.MeshingJob parentMeshingJob;
@@ -302,14 +322,13 @@ namespace OctreeGeneration {
 				var pos = parent.Children[childIndx].Pos;
 				var size = parent.Children[childIndx].Size;
 				var coord = (int3)round(pos / size);
-				return string.Format("Deleting Node (#{0:2} {1:2}:{2:2})", lod, coord.x, coord.y, coord.z);
+				return string.Format("Deleting Node (#{0} {1},{2},{3})", lod, coord.x, coord.y, coord.z);
 			}
 
-			public DeleteNodeOp (TerrainNode parent, int childIndx, int lod, float dist) : base(lod, dist) {
+			public DeleteNodeOp (int lod, float dist, TerrainNode node, TerrainNode parent, int childIndx) : base(lod, dist) {
+				this.node = node;
 				this.parent = parent;
 				this.childIndx = childIndx;
-				node = parent.Children[childIndx];
-				UnityEngine.Assertions.Assert.IsTrue(node != null);
 			}
 			public override void Schedule (TerrainOctree octree) {
 				if (parent.IsCreated && node.IsCreated) {
@@ -572,7 +591,7 @@ namespace OctreeGeneration {
 
 		void drawTree (TerrainNode n) {
 			Gizmos.color = _GetLodColor(n.Lod);
-			Gizmos.DrawWireCube(n.Center, n.IsCreated ? (float3)n.Size : (float3)n.Size / 3);
+			Gizmos.DrawWireCube(n.Center, n.IsCreated ? (float3)n.Size : (float3)n.Size * 0.5f);
 			
 			//if (n.voxels != null)
 			//	Gizmos.DrawWireCube(n.pos + n.size/2, (float3)n.size * 0.96f);
