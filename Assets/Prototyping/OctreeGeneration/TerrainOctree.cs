@@ -364,9 +364,6 @@ namespace OctreeGeneration {
 			}
 
 			TerrainNode[] newChildren;
-
-			TerrainGenerator.GetVoxelsJob voxelsJob;
-			TerrainMesher.MeshingJob meshingJob;
 			
 			public MoveRootOp (TerrainNode oldRoot, int lod, float dist, float3 newPos) : base(lod, dist) {
 				this.oldRoot = oldRoot;
@@ -401,30 +398,20 @@ namespace OctreeGeneration {
 			}
 
 			public override void Schedule (TerrainOctree octree) {
-				voxelsJob = octree.generator.SheduleGetVoxels(newPos, oldRoot.Size);
-				
 				newChildren = getNewChildren();
-				int newChildrenMask = TerrainNode.GetChildrenMask(newChildren);
-
-				meshingJob = octree.mesher.SheduleMeshNode(oldRoot.Size, newChildrenMask, voxelsJob);
 			}
-			public override bool CanCompleteInstantly () => false;
-			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted();
+			public override bool CanCompleteInstantly () => true;
+			public override bool IsCompleted () => true;
 			public override void Apply (TerrainOctree octree) {
 				if (!oldRoot.IsDestroyed) { // if we want to rebuild the tree
 					var newRoot = octree.createNode(lod, newPos, oldRoot.Size);
 					octree.root = newRoot;
-
-					voxelsJob.Apply(newRoot);
-					meshingJob.Apply(newRoot);
 
 					moveChildren(newRoot);
 				}
 				Dispose();
 			}
 			public override void Dispose () {
-				voxelsJob.Dispose();
-				meshingJob.Dispose();
 			}
 		}
 		#endregion
