@@ -269,11 +269,11 @@ namespace OctreeGeneration {
 				
 				//var seams = new List<TerrainMesher.SeamMeshingJob>();
 				//{
-				//	var job = octree.mesher.SheduleMeshSeam(octree, node.Pos, node.Size, lod, meshingJob);
+				//	var job = octree.mesher.SheduleMeshSeam(octree, node, meshingJob);
 				//	seams.Add(job);
 				//}
-				//foreach (var n in octree.GetAllTouchingNodesForCreateNode(node.Pos, node.Size, lod)) {
-				//	var job = octree.mesher.SheduleMeshSeam(octree, n.Pos, n.Size, n.Lod, meshingJob);
+				//foreach (var neighbour in octree.GetAllTouchingNodes(node)) {
+				//	var job = octree.mesher.SheduleMeshSeam(octree, neighbour, meshingJob); // neighbour also waits for our mesh to finish since it potentially acesses it
 				//	seams.Add(job);
 				//}
 				//
@@ -452,61 +452,6 @@ namespace OctreeGeneration {
 			return LookupOctree(posInNeighbour, n.Lod);
 		}
 
-		//
-		//class VirtualNode {
-		//	public float3	pos;
-		//	public float	size;
-		//	public int		lod;
-		//
-		//	public Voxels	voxels;
-		//	public Cells	cells;
-		//};
-		//TerrainNode _lookupOctreeForCreateNode (TerrainNode n, float3 nodePos, int nodeLod, float3 worldPos, int minLod) {
-		//	if (n.Lod < minLod)
-		//		return null;
-		//	
-		//	var pos = worldPos;
-		//	pos -= n.Pos;
-		//	pos /= n.Size/2;
-		//	var posChild = (int3)floor(pos);
-		//
-		//	if (all(posChild >= 0 & posChild <= 1)) {
-		//		
-		//		var child = n.GetChild(posChild);
-		//		if (child != null) {
-		//			var childLookup = _lookupOctreeForCreateNode(child, nodePos, nodeLod, worldPos, minLod);
-		//			if (childLookup != null)	
-		//				return childLookup; // in child octant
-		//		} else if ((n.Lod - 1) == nodeLod && all(posChild == nodePos)) {
-		//			return 
-		//		}
-		//		return n; // in octant that does not have a child
-		//	} else {
-		//		return null; // not in this Nodes octants
-		//	}
-		//}
-		//public TerrainNode LookupOctreeForCreateNode (float3 nodePos, int nodeLod, float3 worldPos, int minLod=-1) { // Octree lookup which smallest Node contains the world space postion
-		//	if (root == null) return null;
-		//	return _lookupOctreeForCreateNode(root, nodePos, nodeLod, worldPos, minLod);
-		//}
-		//
-		//public TerrainNode GetNeighbourTreeForCreateNode (TerrainNode n, float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
-		//	var posInNeighbour = n.Pos + n.Size/2 + (float3)dir * (n.Size + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
-		//	
-		//	Gizmos.color = Color.yellow;
-		//	Gizmos.DrawWireCube(posInNeighbour, (float3)1);
-		//
-		//	return LookupOctreeForCreateNode(nodePos, nodeSize, nodeLod, posInNeighbour, nodeLod);
-		//}
-		//public TerrainNode GetNeighbourTreeForCreateNode (float3 nodePos, float nodeSize, int nodeLod, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
-		//	var posInNeighbour = nodePos + nodeSize/2 + (float3)dir * (nodeSize + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
-		//
-		//	Gizmos.color = Color.yellow;
-		//	Gizmos.DrawWireCube(posInNeighbour, (float3)1);
-		//
-		//	return LookupOctree(posInNeighbour, nodeLod);
-		//}
-
 		public static readonly int3[] NeighbourDirs = new int3[] {
 			int3(-1,-1,-1), int3( 0,-1,-1), int3(+1,-1,-1),
 			int3(-1, 0,-1), int3( 0, 0,-1), int3(+1, 0,-1),
@@ -522,14 +467,14 @@ namespace OctreeGeneration {
 		};
 		
 		HashSet<TerrainNode> GetAllTouchingNodes (TerrainNode n) {
-			var touching = new HashSet<TerrainNode>();
+			var touching = new HashSet<TerrainNode>(); // hashset to prevent duplicates
 			
 			for (int octant=0; octant<8; ++octant) {
-				if (n.Children[octant] == null) { // for empty octants
+				if (n.Children[octant] == null) { // for all combinations of empty octants (space belonging to parent)
 					for (int child=0; child<8; ++child) {
-						if (n.Children[child] != null) {
-							int3 dir = TerrainNode.ChildOctants[octant] - TerrainNode.ChildOctants[child];
-							TerrainNode.GetNodesInDir(n.Children[child], dir, touching);
+						if (n.Children[child] != null) { // and existing children
+							int3 dir = TerrainNode.ChildOctants[octant] - TerrainNode.ChildOctants[child]; // get dir from child to empty octant (space belonging to parent)
+							TerrainNode.GetNodesInDir(n.Children[child], dir, touching); // get all nodes in that direction in the child node
 						}
 					}
 				}
@@ -537,37 +482,19 @@ namespace OctreeGeneration {
 
 			for (int i=0; i<NeighbourDirs.Length; ++i) {
 				int3 dir = NeighbourDirs[i];
-
+				
 				var neigh = GetNeighbourTree(n, dir);
-				if (neigh != null) {
+				if (neigh != null && GetNeighbourTree(neigh, -dir) == n) { // we do not catch cases where wo can only touch a neighbour in the space of a child, so do this check
 					if (neigh.Lod > n.Lod) {
-						touching.Add(neigh);
+						touching.Add(neigh); // neighbour is larger than us, always touches us (if it had a child in the spot next to us GetNeighbourTree() would have returned that child 
 					} else {
-						TerrainNode.GetNodesInDir(neigh, -dir, touching);
+						TerrainNode.GetNodesInDir(neigh, -dir, touching); // get all nodes in the direction to us inside the neighbour
 					}
 				}
 			}
 
 			return touching;
 		}
-		//HashSet<TerrainNode> GetAllTouchingNodesForCreateNode (float3 nodePos, float nodeSize, int nodeLod) {
-		//	var touching = new HashSet<TerrainNode>();
-		//	
-		//	for (int i=0; i<NeighbourDirs.Length; ++i) {
-		//		int3 dir = NeighbourDirs[i];
-		//
-		//		var neigh = GetNeighbourTreeForCreateNode(nodePos, nodeSize, nodeLod, dir);
-		//		if (neigh != null) {
-		//			if (neigh.Lod > nodeLod) {
-		//				touching.Add(neigh);
-		//			} else {
-		//				TerrainNode.GetNodesInDir(neigh, -dir, touching);
-		//			}
-		//		}
-		//	}
-		//
-		//	return touching;
-		//}
 		#endregion
 
 		#region Debug Visualizations
@@ -589,23 +516,23 @@ namespace OctreeGeneration {
 			}
 		}
 		void drawOctree () {
-			if (root != null)
-				drawTree(root);
+			//if (root != null)
+			//	drawTree(root);
 
-			//if (test != null) {
-			//	var testN = LookupOctree(testPos);
-			//	
-			//	if (testN != null) {
-			//		var touching = GetAllTouchingNodes(testN);
-			//		foreach (var n in touching) {
-			//			Gizmos.color = Color.yellow;
-			//			Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size * 0.99f);
-			//		}
-			//
-			//		Gizmos.color = Color.red;
-			//		Gizmos.DrawWireCube(testN.Pos + testN.Size/2, (float3)testN.Size * 0.99f);
-			//	}
-			//}
+			if (test != null) {
+				var testN = LookupOctree(testPos);
+				
+				if (testN != null) {
+					var touching = GetAllTouchingNodes(testN);
+					foreach (var n in touching) {
+						Gizmos.color = _GetLodColor(n.Lod);
+						Gizmos.DrawWireCube(n.Pos + n.Size/2, (float3)n.Size * 0.99f);
+					}
+			
+					Gizmos.color = Color.black;
+					Gizmos.DrawWireCube(testN.Pos + testN.Size/2, (float3)testN.Size * 0.99f);
+				}
+			}
 		}
 
 		void OnDrawGizmosSelected () {

@@ -88,19 +88,35 @@ namespace OctreeGeneration {
 		}
 		
 		public static void GetNodesInDir (TerrainNode n, int3 dir, HashSet<TerrainNode> touching) {
-			touching.Add(n);
-
 			int3 dirMask = abs(dir);
 
 			for (int i=0; i<8; ++i) {
-				if (n.Children[i] != null && all((ChildDirs[i] * dirMask) == dir)) // any children in the dir
-					GetNodesInDir(n.Children[i], dir, touching);
+				if (all((ChildDirs[i] * dirMask) == dir)) { // child octant interfaces with the requested dir
+					if (n.Children[i] != null) {
+						GetNodesInDir(n.Children[i], dir, touching); // child exists -> recurse into child
+					} else {
+						touching.Add(n); // child does not exist -> this nodes space touches
+					}
+				}
 			}
 		} 
 		public HashSet<TerrainNode> GetNodesInDir (int3 dir) { // get nodes that are touching the face, edge or corner specified by dir (this node included) ([-1, 0, +1] for each axis, edge has 3 non zero components, edge has 2, face has 1)
 			var touching = new HashSet<TerrainNode>();
 			GetNodesInDir(this, dir, touching);
 			return touching;
+		}
+		public bool CanTouchInDir (int3 dir) {
+			int3 dirMask = abs(dir);
+
+			for (int i=0; i<8; ++i) {
+				if (all((ChildDirs[i] * dirMask) == dir)) { // child octant interfaces with the requested dir
+					if (Children[i] == null) {
+						return true; // child does not exist -> this nodes space touches
+					}
+				}
+			}
+
+			return false;
 		}
 
 		public void Destroy () {
