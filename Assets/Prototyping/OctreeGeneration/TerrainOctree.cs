@@ -484,11 +484,11 @@ namespace OctreeGeneration {
 				int3 dir = NeighbourDirs[i];
 				
 				var neigh = GetNeighbourTree(n, dir);
-				if (neigh != null && GetNeighbourTree(neigh, -dir) == n) { // we do not catch cases where wo can only touch a neighbour in the space of a child, so do this check
+				if (neigh != null) { 
 					if (neigh.Lod > n.Lod) {
 						touching.Add(neigh); // neighbour is larger than us, always touches us (if it had a child in the spot next to us GetNeighbourTree() would have returned that child 
 					} else {
-						TerrainNode.GetNodesInDir(neigh, -dir, touching); // get all nodes in the direction to us inside the neighbour
+						TerrainNode.GetNodesInDirThatTouch(neigh, -dir, touching, this, n); // get all nodes in the direction to us inside the neighbour that touch us
 					}
 				}
 			}

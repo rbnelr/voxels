@@ -99,24 +99,24 @@ namespace OctreeGeneration {
 					}
 				}
 			}
-		} 
-		public HashSet<TerrainNode> GetNodesInDir (int3 dir) { // get nodes that are touching the face, edge or corner specified by dir (this node included) ([-1, 0, +1] for each axis, edge has 3 non zero components, edge has 2, face has 1)
-			var touching = new HashSet<TerrainNode>();
-			GetNodesInDir(this, dir, touching);
-			return touching;
 		}
-		public bool CanTouchInDir (int3 dir) {
+		public static void GetNodesInDirThatTouch (TerrainNode n, int3 dir, HashSet<TerrainNode> touching, TerrainOctree octree, TerrainNode toTouch) {
 			int3 dirMask = abs(dir);
-
+		
+			bool anyEmptyInDir = false;
 			for (int i=0; i<8; ++i) {
 				if (all((ChildDirs[i] * dirMask) == dir)) { // child octant interfaces with the requested dir
-					if (Children[i] == null) {
-						return true; // child does not exist -> this nodes space touches
+					if (n.Children[i] != null) {
+						GetNodesInDirThatTouch(n.Children[i], dir, touching, octree, toTouch); // child exists -> recurse into child
+					} else {
+						anyEmptyInDir = true;
 					}
 				}
 			}
 
-			return false;
+			if (anyEmptyInDir && octree.GetNeighbourTree(n, dir) == toTouch) {
+				touching.Add(n); // child does not exist -> this nodes space touches the node
+			}
 		}
 
 		public void Destroy () {
