@@ -25,8 +25,9 @@ namespace OctreeGeneration {
 	}
 	
 	public class Voxels {
-		public NativeArray<Voxel>	native;
+		public NativeArray<Voxel> native;
 		public int refCount = 0;
+		public TerrainGenerator.GetVoxelsJob job;
 
 		public void IncRef () {
 			refCount++;
@@ -171,8 +172,8 @@ namespace OctreeGeneration {
 		
 		TerrainGeneratorStruct terrainGenerator = new TerrainGeneratorStruct();
 		
-		public GetVoxelsJob SheduleGetVoxels (float3 nodePos, float nodeSize) {
-			return new GetVoxelsJob(nodePos, nodeSize, terrainGenerator);
+		public GetVoxelsJob SheduleGetVoxels (TerrainNode node) {
+			return new GetVoxelsJob(node, terrainGenerator);
 		}
 
 		[BurstCompile]
@@ -196,24 +197,25 @@ namespace OctreeGeneration {
 		}
 
 		public class GetVoxelsJob {
-			public Voxels Voxels;
+			public TerrainNode node;
 			public JobHandle? JobHandle;
 			Job job;
 			
-			public GetVoxelsJob (float3 pos, float size, TerrainGeneratorStruct gen) {
+			public GetVoxelsJob (TerrainNode node, TerrainGeneratorStruct gen) {
 				job = new Job {
-					NodePos = pos,
-					NodeSize = size,
+					NodePos = node.Pos,
+					NodeSize = node.Size,
 					Gen = gen,
 				};
 
 				int ArraySize = TerrainNode.VOXEL_COUNT + 1;
 				int voxelsLength = ArraySize * ArraySize * ArraySize;
 				
-				Voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent) };
+				node.Voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent), job = this };
+				node.Voxels.IncRef(); // for putting in job
+				node.Voxels.IncRef(); // for putting in node
 
-				Voxels.IncRef();
-				job.voxels = Voxels.native;
+				job.voxels = node.Voxels.native;
 
 				JobHandle = job.Schedule(voxelsLength, ArraySize);
 			}
@@ -221,7 +223,7 @@ namespace OctreeGeneration {
 			public void Apply (TerrainNode node) {
 				JobHandle.Value.Complete();
 
-				node.SetVoxels(Voxels);
+				node.SetVoxels(node.Voxels);
 				
 				Dispose();
 			}
@@ -230,10 +232,10 @@ namespace OctreeGeneration {
 				if (JobHandle != null) {
 					JobHandle.Value.Complete();
 					
-					Voxels.DecRef();
+					node.Voxels.DecRef();
+					node.Voxels.job = null;
 
 					JobHandle = null;
-					Voxels = null;
 				}
 			}
 		}

@@ -41,10 +41,10 @@ namespace OctreeGeneration {
 		public Mesh SeamMesh = null;
 
 		public Voxels Voxels = null;
-		//public TerrainMesher.DualContouring.Data DC;
+		public TerrainMesher.Data MesherData;
 
 		public bool IsDestroyed => Go == null; // Node was destroyed and removed from the tree, should no longer be used (this can be observed true when nodes are destroyed while still being used by a job for ex.)
-		public bool IsCreated => Voxels != null; // if false => this node was put into the tree, but does not have voxels or a mesh yet
+		public bool IsCreated => Voxels != null && Voxels.job == null; // if false => this node was put into the tree, but does not have voxels or a mesh yet
 
 		public static readonly int3[] ChildOctants = new int3[8] { int3(0,0,0), int3(1,0,0),  int3(0,1,0), int3(1,1,0),   int3(0,0,1), int3(1,0,1),  int3(0,1,1), int3(1,1,1) };
 		public static readonly int3[] ChildDirs = new int3[8] { int3(-1,-1,-1), int3(+1,-1,-1),  int3(-1,+1,-1), int3(+1,+1,-1),   int3(-1,-1,+1), int3(+1,-1,+1),  int3(-1,+1,+1), int3(+1,+1,+1) };

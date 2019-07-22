@@ -246,7 +246,7 @@ namespace OctreeGeneration {
 			TerrainGenerator.GetVoxelsJob voxelsJob;
 			TerrainMesher.MeshingJob meshingJob;
 			TerrainMesher.MeshingJob parentMeshingJob;
-			//TerrainMesher.SeamMeshingJob[] seamJobs;
+			TerrainMesher.SeamMeshingJob[] seamJobs;
 			
 			public CreateNodeOp (int lod, float dist, TerrainNode node, TerrainNode parent, int childIndx) : base(lod, dist) {
 				this.node = node;
@@ -255,33 +255,35 @@ namespace OctreeGeneration {
 			}
 
 			public override void Schedule (TerrainOctree octree) {
-				voxelsJob = octree.generator.SheduleGetVoxels(node.Pos, node.Size);
+				voxelsJob = octree.generator.SheduleGetVoxels(node);
 				
-				meshingJob = octree.mesher.SheduleMeshNode(node.Size, node.GetChildrenMask(), voxelsJob);
+				meshingJob = octree.mesher.SheduleMeshNode(node, node.GetChildrenMask());
 
 				if (parent != null && parent.IsCreated) {
 					int childrenMask = parent.GetChildrenMask();
 					UnityEngine.Assertions.Assert.IsTrue((childrenMask & (1 << childIndx)) == 0);
 					childrenMask |= 1 << childIndx;
 				
-					parentMeshingJob = octree.mesher.SheduleMeshNode(parent.Size, childrenMask, parent.Voxels);
+					parentMeshingJob = octree.mesher.SheduleMeshNode(parent, childrenMask);
 				}
 				
-				//var seams = new List<TerrainMesher.SeamMeshingJob>();
-				//{
-				//	var job = octree.mesher.SheduleMeshSeam(octree, node, meshingJob);
-				//	seams.Add(job);
-				//}
-				//foreach (var neighbour in octree.GetAllTouchingNodes(node)) {
-				//	var job = octree.mesher.SheduleMeshSeam(octree, neighbour, meshingJob); // neighbour also waits for our mesh to finish since it potentially acesses it
-				//	seams.Add(job);
-				//}
-				//
-				//seamJobs = seams.ToArray();
+				var seams = new List<TerrainMesher.SeamMeshingJob>();
+				{
+					var job = octree.mesher.SheduleMeshSeam(octree, node);
+					seams.Add(job);
+				}
+				foreach (var neighbour in octree.GetAllTouchingNodes(node)) {
+					if (neighbour.IsCreated) {
+						var job = octree.mesher.SheduleMeshSeam(octree, neighbour); // neighbour also waits for our mesh to finish since it potentially acesses it
+						seams.Add(job);
+					}
+				}
+				
+				seamJobs = seams.ToArray();
 			}
 			public override bool CanCompleteInstantly () => false;
 			public override bool IsCompleted () => voxelsJob.IsCompleted() && meshingJob.IsCompleted() && (parentMeshingJob?.IsCompleted() ?? true)
-				//&& seamJobs.All(x => x.IsCompleted())
+				&& seamJobs.All(x => x.IsCompleted())
 				;
 			public override void Apply (TerrainOctree octree) {
 				if (!node.IsDestroyed) { // if we want to rebuild the tree
@@ -291,16 +293,8 @@ namespace OctreeGeneration {
 					meshingJob.Apply(node);
 					parentMeshingJob?.Apply(parent);
 
-					if (parent != null) {
-						//Debug.Assert(parent.Children[childIndx] == null);
-						//parent.Children[childIndx] = n;
-					} else {
-						Debug.Assert(octree.root == node);
-						//octree.root = n;
-					}
-
-					//foreach (var j in seamJobs)
-					//	j.Apply();
+					foreach (var j in seamJobs)
+						j.Apply();
 				}
 				Dispose();
 			}
@@ -308,6 +302,8 @@ namespace OctreeGeneration {
 				voxelsJob.Dispose();
 				meshingJob.Dispose();
 				parentMeshingJob?.Dispose();
+				foreach (var j in seamJobs)
+					j.Dispose();
 			}
 		}
 
@@ -336,7 +332,7 @@ namespace OctreeGeneration {
 					UnityEngine.Assertions.Assert.IsTrue((childrenMask & (1 << childIndx)) != 0);
 					childrenMask &= ~(1 << childIndx);
 				
-					parentMeshingJob = octree.mesher.SheduleMeshNode(parent.Size, childrenMask, parent.Voxels);
+					parentMeshingJob = octree.mesher.SheduleMeshNode(parent, childrenMask);
 				}
 			}
 			public override bool CanCompleteInstantly () => !(parent.IsCreated && node.IsCreated);
@@ -446,8 +442,8 @@ namespace OctreeGeneration {
 		public TerrainNode GetNeighbourTree (TerrainNode n, int3 dir) { // find neighbouring nodes of the octree, returns leaf the node of equal or larger size neighbouring this node in the direction specified by dir [-1, 0, +1] for each axis
 			var posInNeighbour = n.Pos + n.Size/2 + (float3)dir * (n.Size + VoxelSize*TerrainNode.VOXEL_COUNT)/2;
 
-			Gizmos.color = Color.yellow;
-			Gizmos.DrawWireCube(posInNeighbour, (float3)1);
+			//Gizmos.color = Color.yellow;
+			//Gizmos.DrawWireCube(posInNeighbour, (float3)1);
 
 			return LookupOctree(posInNeighbour, n.Lod);
 		}
