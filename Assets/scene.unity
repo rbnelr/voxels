@@ -229,15 +229,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 567237929}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8804607c774423a4cb61202f61439da4, type: 3}
+  m_Script: {fileID: 11500000, guid: 9591232a3f935a2429f36500f8c1a68f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   LoadRadius: 50
-  ChunkPrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
+  ChunkPrefab: {fileID: 1667098945258162, guid: 7ed95167d974a9142bba438b2f56d817,
     type: 3}
   player: {fileID: 1375430559}
   TerrainGenerator: {fileID: 1345146788}
-  AlwaysDrawChunks: 0
+  AlwaysDrawChunks: 1
 --- !u!4 &567237931
 Transform:
   m_ObjectHideFlags: 0
@@ -369,7 +369,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1345146787}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7ebb5da4f1487844c915e9af9c85f86c, type: 3}
+  m_Script: {fileID: 11500000, guid: 6c764a94ff2d09c4fbd594bf33bc452a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!4 &1345146789
@@ -428,7 +428,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1375430559}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f77b90c9d8edffc4786efb7248a16ef5, type: 3}
+  m_Script: {fileID: 11500000, guid: 4837325b2b3fa6743817511a40dc6a8f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   BaseSpeed: 1

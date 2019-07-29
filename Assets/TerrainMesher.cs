@@ -11,7 +11,7 @@ using static OctreeGeneration.VoxelUtil;
 using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
-	
+	/*
 	public class TerrainMesher : MonoBehaviour {
 		
 		public float DCIterStrength = 1f;
