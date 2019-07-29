@@ -9,36 +9,7 @@ using static OctreeGeneration.VoxelUtil;
 using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
-	public struct Voxel {
-		public float distance;
-		public float3 gradient;
-		
-		public static Voxel Lerp (Voxel a, Voxel b, float t) {
-			a.distance  = a.distance  + (b.distance  - a.distance ) * t;
-			a.gradient = a.gradient + (b.gradient - a.gradient) * t;
-			return a;
-		}
-
-		public override string ToString () {
-			return distance.ToString();
-		}
-	}
 	
-	public class Voxels {
-		public NativeArray<Voxel> native;
-		public int refCount = 0;
-		public TerrainGenerator.GetVoxelsJob job;
-
-		public void IncRef () {
-			refCount++;
-		}
-		public void DecRef () {
-			refCount--;
-			if (refCount == 0)
-				native.Dispose();
-		}
-	}
-
 	public struct TerrainGeneratorStruct {
 		
 		float smooth_func (float x, float n) {
@@ -117,7 +88,7 @@ namespace OctreeGeneration {
 			cave = max(cave, -1 * Sphere(pos, float3(15.82f, 16.79f, -12.94f), 12.94f-7.23f));
 
 			return new Voxel {
-				distance = cave.val,
+				value = cave.val,
 				gradient = cave.gradient,
 			};
 			
@@ -172,72 +143,36 @@ namespace OctreeGeneration {
 		
 		TerrainGeneratorStruct terrainGenerator = new TerrainGeneratorStruct();
 		
-		public GetVoxelsJob SheduleGetVoxels (TerrainNode node) {
-			return new GetVoxelsJob(node, terrainGenerator);
-		}
-
 		[BurstCompile]
 		struct Job : IJobParallelFor {
-			[ReadOnly] public float3 NodePos;
-			[ReadOnly] public float NodeSize;
+			[ReadOnly] public float3 ChunkPos;
 			[ReadOnly] public TerrainGeneratorStruct Gen;
 		
-			[WriteOnly] public NativeArray<Voxel> voxels;
+			[WriteOnly] public NativeArray<Voxel> Voxels;
 
 			public void Execute (int i) {
-				int voxelIndex = i;
-				int3 voxelCoord = flatTo3dIndex(i, TerrainNode.VOXEL_COUNT+1);
+				int3 voxelCoord = flatTo3dIndex(i, Chunk.VOXELS);
 
 				float3 pos_world = (float3)voxelCoord;
-				pos_world *= NodeSize / TerrainNode.VOXEL_COUNT;
-				pos_world += NodePos;
+				pos_world *= Chunk.VOXEL_SIZE;
+				pos_world += ChunkPos;
 						
-				voxels[voxelIndex] = Gen.Generate(pos_world);
+				Voxels[i] = Gen.Generate(pos_world);
 			}
 		}
 
-		public class GetVoxelsJob {
-			public TerrainNode node;
-			public JobHandle? JobHandle;
-			Job job;
-			
-			public GetVoxelsJob (TerrainNode node, TerrainGeneratorStruct gen) {
-				job = new Job {
-					NodePos = node.Pos,
-					NodeSize = node.Size,
-					Gen = gen,
-				};
+		public JobHandle StartJob (Chunk c) {
+			int voxelCount = Chunk.VOXELS * Chunk.VOXELS * Chunk.VOXELS;
 
-				int ArraySize = TerrainNode.VOXEL_COUNT + 1;
-				int voxelsLength = ArraySize * ArraySize * ArraySize;
-				
-				node.Voxels = new Voxels { native = new NativeArray<Voxel>(voxelsLength, Allocator.Persistent), job = this };
-				node.Voxels.IncRef(); // for putting in job
-				node.Voxels.IncRef(); // for putting in node
+			c.Voxels = new NativeArray<Voxel>(voxelCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
 
-				job.voxels = node.Voxels.native;
+			var job = new Job {
+				ChunkPos = c.Corner,
+				Gen = terrainGenerator,
+				Voxels = c.Voxels
+			};
 
-				JobHandle = job.Schedule(voxelsLength, ArraySize);
-			}
-			public bool IsCompleted () => JobHandle.Value.IsCompleted;
-			public void Apply (TerrainNode node) {
-				JobHandle.Value.Complete();
-
-				node.SetVoxels(node.Voxels);
-				
-				Dispose();
-			}
-
-			public void Dispose () {
-				if (JobHandle != null) {
-					JobHandle.Value.Complete();
-					
-					node.Voxels.DecRef();
-					node.Voxels.job = null;
-
-					JobHandle = null;
-				}
-			}
+			return job.Schedule(voxelCount, Chunk.VOXELS * Chunk.VOXELS);
 		}
 	}
 }

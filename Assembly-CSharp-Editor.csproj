@@ -60,12 +60,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets\NoiseTesting\Quad\Editor\TextureCreatorInspector.cs" />
-    <Compile Include="Assets\NoiseTesting\Surface\Editor\SurfaceCreatorInspector.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\Editor\TerrainGeneratorInspector.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\Editor\TerrainSliceInspector.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\Editor\VisualizerInspector.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\Editor\VisualizerInspector.cs" />
+    <Compile Include="Assets\Editor\VisualizerInspector.cs" />
     <Reference Include="UnityEditor.TestRunner">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/UnityEditor.TestRunner.dll</HintPath>
     </Reference>
@@ -395,9 +390,6 @@
     </Reference>
     <Reference Include="AssetStoreTools">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Assets/AssetStoreTools/Editor/AssetStoreTools.dll</HintPath>
-    </Reference>
-    <Reference Include="CoherentNoise">
-      <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Assets/CoherentNoise/CoherentNoise.dll</HintPath>
     </Reference>
     <Reference Include="Unity.Analytics.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/PackageCache/com.unity.analytics@3.3.2/Unity.Analytics.Editor.dll</HintPath>

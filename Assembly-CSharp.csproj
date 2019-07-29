@@ -60,37 +60,14 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets\MinMaxRange\MinMaxAttribute.cs" />
-    <Compile Include="Assets\MinMaxRange\MinMaxRangeDrawer.cs" />
-    <Compile Include="Assets\Noise.cs" />
-    <Compile Include="Assets\NoiseSample.cs" />
-    <Compile Include="Assets\NoiseTesting\Flow3D\Flow3D.cs" />
-    <Compile Include="Assets\NoiseTesting\Quad\TextureCreator.cs" />
-    <Compile Include="Assets\NoiseTesting\Surface\SurfaceCreator.cs" />
-    <Compile Include="Assets\NoiseTesting\Surface\SurfaceFlow.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\MarchingCubes.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\Player.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\TerrainChunk.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\TerrainController.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\TerrainGenerator.cs" />
-    <Compile Include="Assets\Prototyping\ChunkedGeneration\Scripts\ThreadPool.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\TerrainGenerator.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\TerrainSlice.cs" />
-    <Compile Include="Assets\Prototyping\GeneratorTesting\Visualizer.cs" />
-    <Compile Include="Assets\Prototyping\MeshExt.cs" />
-    <Compile Include="Assets\Prototyping\NoiseExt.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\NoiseBugRepro.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainGenerator.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainMesher.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainNode.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\TerrainOctree.cs" />
-    <Compile Include="Assets\Prototyping\OctreeGeneration\Visualizer.cs" />
-    <Compile Include="Assets\Prototyping\OctreeTest\TerrainOctreeTest.cs" />
-    <Compile Include="Assets\Prototyping\Player.cs" />
-    <Compile Include="Assets\Prototyping\VectorExt.cs" />
-    <None Include="Assets\CoherentNoise\readme.txt" />
-    <None Include="Assets\Prototyping\Terrain.shader" />
-    <None Include="Assets\NoiseTesting\Surface\SurfaceShader.shader" />
+    <Compile Include="Assets\Chunk.cs" />
+    <Compile Include="Assets\Chunks.cs" />
+    <Compile Include="Assets\MeshExt.cs" />
+    <Compile Include="Assets\NoiseExt.cs" />
+    <Compile Include="Assets\Player.cs" />
+    <Compile Include="Assets\TerrainGenerator.cs" />
+    <Compile Include="Assets\TerrainMesher.cs" />
+    <None Include="Assets\Terrain.shader" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
@@ -402,9 +379,6 @@
     </Reference>
     <Reference Include="UnityEngine.XRModule">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/Unity 2019.3.0a5/Editor/Data/Managed/UnityEngine/UnityEngine.XRModule.dll</HintPath>
-    </Reference>
-    <Reference Include="CoherentNoise">
-      <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Assets/CoherentNoise/CoherentNoise.dll</HintPath>
     </Reference>
     <Reference Include="Unity.Analytics.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/PackageCache/com.unity.analytics@3.3.2/Unity.Analytics.Editor.dll</HintPath>
