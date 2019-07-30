@@ -13,11 +13,12 @@ namespace OctreeGeneration {
 		public float LoadRadius = 200;
 		
 		public GameObject ChunkPrefab;
-		public GameObject player;
+		public GameObject Player;
 
 		public TerrainGenerator TerrainGenerator;
+		public TerrainMesher TerrainMesher;
 
-		float3 playerPos { get { return player.transform.position; } }
+		float3 playerPos { get { return Player.transform.position; } }
 		
 		public bool AlwaysDrawChunks = false;
 
@@ -75,7 +76,8 @@ namespace OctreeGeneration {
 		}
 
 		Chunk chunkInProcess = null;
-		JobHandle voxelizeJob;
+		TerrainGenerator.Job genJob;
+		TerrainMesher.Job meshJob;
 
 		void UpdateChunk (Chunk c, ref Chunk chunkToProcess) {
 			if (!c.Voxels.IsCreated) {
@@ -85,22 +87,26 @@ namespace OctreeGeneration {
 		}
 
 		void StartChunkProcessing (Chunk c) {
-			if (c == null)
-				return;
-			chunkInProcess = c;
+			if (chunkInProcess == null && c != null) {
+				chunkInProcess = c;
 
-			voxelizeJob = TerrainGenerator.StartJob(c);
+				genJob = TerrainGenerator.StartJob(c);
+				meshJob = TerrainMesher.StartJob(c, genJob);
+			}
 		}
 		void FinishChunkProcessing () {
-			if (chunkInProcess == null || !voxelizeJob.IsCompleted)
-				return;
-			voxelizeJob.Complete();
+			if (chunkInProcess != null && (genJob?.IsCompleted ?? true) && (meshJob?.IsCompleted ?? true)) {
+				genJob?.Complete();
+				meshJob?.Complete();
+				chunkInProcess.done = true;
 			
-			chunkInProcess = null;
+				chunkInProcess = null;
+			}
 		}
 
 		void OnDestroy () {
-			voxelizeJob.Complete();
+			genJob?.Complete();
+			meshJob?.Complete();
 			chunkInProcess = null;
 
 			foreach (var c in chunks.Values) {

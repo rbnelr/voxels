@@ -12,104 +12,496 @@ using static Unity.Mathematics.math;
 
 namespace OctreeGeneration {
 	
+	public class MeshData {
+		public NativeList<float3> vertices;
+		public NativeList<float3> normals;
+		public NativeList<float2> uv;
+		public NativeList<Color>  colors;
+		public NativeList<int>    triangles;
+			
+		static List<Vector3>	verticesBuf  = new List<Vector3>();
+		static List<Vector3>	normalsBuf   = new List<Vector3>();
+		static List<Vector2>	uvBuf        = new List<Vector2>();
+		static List<Color>		colorsBuf    = new List<Color>();
+		static List<int>		trianglesBuf = new List<int>();
+
+		public MeshData () {
+			int ArraySize = Chunk.VOXELS + 1;
+			int vertexAlloc = ArraySize * ArraySize * 6;
+				
+			vertices  = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
+			normals   = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
+			uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
+			colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
+			triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
+		}
+
+		public void Dispose () {
+			vertices  .Dispose();
+			normals   .Dispose();
+			uv        .Dispose();
+			colors    .Dispose();
+			triangles .Dispose();
+		}
+			
+		public void SetMesh (Mesh mesh) {
+		
+			Profiler.BeginSample("TerrainNode.AssignMesh");
+			mesh.Clear();
+				Profiler.BeginSample("vertices");
+					mesh.SetVerticesNative(vertices, ref verticesBuf);
+				Profiler.EndSample();
+				Profiler.BeginSample("normals");
+					mesh.SetNormalsNative(normals, ref normalsBuf);
+				Profiler.EndSample();
+				Profiler.BeginSample("uv");
+					mesh.SetUvsNative(0, uv, ref uvBuf);
+				Profiler.EndSample();
+				Profiler.BeginSample("colors");
+					mesh.SetColorsNative(colors, ref colorsBuf);
+				Profiler.EndSample();
+				Profiler.BeginSample("triangles");
+					mesh.SetTrianglesNative(triangles, 0, ref trianglesBuf);
+				Profiler.EndSample();
+			Profiler.EndSample();
+		}
+	}
+
 	public class TerrainMesher : MonoBehaviour {
 		
 		public float DCIterStrength = 1f;
 		public int DCMaxIterations = 5;
-		float prevDCIterStrength;
-		int prevDCIterations;
 
 		const float ISO = 0.0f; // TODO: make variable for testing?
 		
-		public class Data {
-			public DataNative native;
-			public int refCount = 0;
-			public TerrainMesher.MeshingJob job;
-
-			public Data () {
-				native.Alloc();
-			}
-
-			public void IncRef () {
-				refCount++;
-			}
-			public void DecRef () {
-				refCount--;
-				if (refCount == 0)
-					native.Dispose();
-			}
-			
-			static List<Vector3>	verticesBuf  = new List<Vector3>();
-			static List<Vector3>	normalsBuf   = new List<Vector3>();
-			static List<Vector2>	uvBuf        = new List<Vector2>();
-			static List<Color>		colorsBuf    = new List<Color>();
-			static List<int>		trianglesBuf = new List<int>();
-
-			public void SetMesh (Mesh mesh) {
+		const int VOXELS = Chunk.VOXELS + 2; // Voxels actually generated per chunk
 		
-				Profiler.BeginSample("TerrainNode.AssignMesh");
-				mesh.Clear();
-					Profiler.BeginSample("vertices");
-						mesh.SetVerticesNative(native.vertices, ref verticesBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("normals");
-						mesh.SetNormalsNative(native.normals, ref normalsBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("uv");
-						mesh.SetUvsNative(0, native.uv, ref uvBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("colors");
-						mesh.SetColorsNative(native.colors, ref colorsBuf);
-					Profiler.EndSample();
-					Profiler.BeginSample("triangles");
-						mesh.SetTrianglesNative(native.triangles, 0, ref trianglesBuf);
-					Profiler.EndSample();
-				Profiler.EndSample();
+		// Dual contouring edges are the connections between voxels
+		// If there is a ISO crossing on this line (one voxel < ISO other >= ISO) this edge is a surface edge and will generate a quad
+		const int EDGES_PER_AXIS = VOXELS * VOXELS * (VOXELS - 1); // How many edges in chunk (lines between voxels) per direction of edge (xyz)
+		const int EDGES_TOTAL = EDGES_PER_AXIS * 3; // How many edges in chunk total
+		
+		// Dual contouring cells contain a vertex that is places based on the surface edges
+		// the corners of the cell are voxels, the edges are the edges above
+		const int CELLS = Chunk.VOXELS + 1;
+		const int CELLS_TOTAL = CELLS * CELLS * CELLS;
+
+		public Job StartJob (Chunk c, TerrainGenerator.Job terrGen) {
+			var j = new Job();
+			
+			c.SurfaceEdges = new NativeList<int>(EDGES_TOTAL, Allocator.Persistent);
+
+			var findSurface = new FindSurfaceEdgesJob {
+				Voxels = c.Voxels
+			};
+			
+			j.FindActive = findSurface.ScheduleAppend(c.SurfaceEdges, EDGES_TOTAL, VOXELS * VOXELS, terrGen?.Handle ?? default);
+			return j;
+		}
+		
+		public class Job {
+			public JobHandle FindActive;
+			
+			public bool IsCompleted => FindActive.IsCompleted;
+			public void Complete () => FindActive.Complete();
+		}
+
+		public struct Edge {
+			public float3 pos; // position of approximated iso crossing
+			public float3 normal; // normalized gradient at approximated iso crossing
+		}
+
+		[BurstCompile]
+		public struct FindSurfaceEdgesJob : IJobParallelForFilter {
+			[ReadOnly] public NativeArray<Voxel> Voxels;
+			
+			public bool Execute (int i) {
+				int axis = i / EDGES_PER_AXIS;
+				i %= EDGES_PER_AXIS;
+				
+				int3 size = VOXELS;
+				size[axis] -= 1;
+
+				int3 ia = flatTo3dIndex(i, size);
+				int3 ib = ia;
+				ib[axis] += 1;
+
+				float a = Voxels[_3dToFlatIndex(ia, Chunk.VOXELS + 2)].value;
+				float b = Voxels[_3dToFlatIndex(ib, Chunk.VOXELS + 2)].value;
+
+				a -= ISO;
+				b -= ISO;
+
+				return a < 0 != b < 0;
 			}
 		}
-		public struct DataNative {
-			public NativeArray<Cell> cells;
-			public NativeList<Edge> edges;
-			public NativeList<Edge> seamEdges;
+		
+		//[BurstCompile]
+		//public struct FindSurfaceCellsJob : IJob {
+		//	[ReadOnly] public NativeList<int> SurfaceEdges;
+		//	[WriteOnly] public NativeMultiHashMap<int, int> SurfaceCellEdges;
+		//	
+		//	void AddCellEdge (int cellIndex, int edgeIndex) {
+		//		SurfaceCellEdges[cellIndex]
+		//	}
+		//	public void Execute () {
+		//		for (int i=0; i<SurfaceEdges.Length; ++i) {
+		//			int index = i;
+		//			
+		//			int axis = index / EDGES_PER_AXIS;
+		//			index %= EDGES_PER_AXIS;
+		//		
+		//			int3 size = Chunk.VOXELS + 1;
+		//			size[axis] -= 1;
+		//
+		//			int3 ia = flatTo3dIndex(index, size);
+		//
+		//			SurfaceCellEdges.Add(i, i);
+		//		}
+		//	}
+		//}
+
+		#if false
+			public DataNative data;
 			
-			public NativeList<float3> vertices;
-			public NativeList<float3> normals;
-			public NativeList<float2> uv;
-			public NativeList<Color>  colors;
-			public NativeList<int>    triangles;
+			unsafe void SetEdge (int3 cellIndex, int edge, int edgeIndex) {
+				if (!data.GetActiveCell(cellIndex, out Cell cell)) cell = default;
 
-			public void Alloc () {
-				int ArraySize = Chunk.VOXEL_COUNT + 1;
-				
-				int cellsAlloc = Chunk.VOXEL_COUNT * Chunk.VOXEL_COUNT * Chunk.VOXEL_COUNT;
-				int edgeAlloc = ArraySize * ArraySize * 4;
-				int vertexAlloc = ArraySize * ArraySize * 6;
+				cell.edges[edge] = edgeIndex + 1; // store index in edge list + 1, 0 means edge is inactive
 
-				cells = new NativeArray<Cell>(cellsAlloc, Allocator.Persistent);
-				edges = new NativeList<Edge>(edgeAlloc, Allocator.Persistent);
-				seamEdges = new NativeList<Edge>(ArraySize * 4, Allocator.Persistent);
-				
-				vertices  = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
-				normals   = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
-				uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
-				colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
-				triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
+				data.SetActiveCell(cellIndex, cell);
 			}
 
-			public void Dispose () {
-				cells.Dispose();
-				edges.Dispose();
-				seamEdges.Dispose();
-				
-				vertices  .Dispose();
-				normals   .Dispose();
-				uv        .Dispose();
-				colors    .Dispose();
-				triangles .Dispose();
+			void FindActive (int x, int y, int z) {
+				int3 index = int3(x,y,z);
+
+				if ((childrenMask & (1 <<_3dToFlatIndex(index / (Chunk.VOXEL_COUNT/2), 2))) != 0)
+					return;
+
+				var posA = index;
+				var posB = index + int3(1,0,0);
+				var posC = index + int3(0,1,0);
+				var posD = index + int3(0,0,1);
+						
+				bool voxBValid = all(posB < Chunk.VOXEL_COUNT+1);
+				bool voxCValid = all(posC < Chunk.VOXEL_COUNT+1);
+				bool voxDValid = all(posD < Chunk.VOXEL_COUNT+1);
+						
+				Voxel voxA;
+				Voxel voxB = default;
+				Voxel voxC = default;
+				Voxel voxD = default;
+
+								voxA = Voxels[_3dToFlatIndex(posA, Chunk.VOXEL_COUNT+1)];
+				if (voxBValid) voxB = Voxels[_3dToFlatIndex(posB, Chunk.VOXEL_COUNT+1)];
+				if (voxCValid) voxC = Voxels[_3dToFlatIndex(posC, Chunk.VOXEL_COUNT+1)];
+				if (voxDValid) voxD = Voxels[_3dToFlatIndex(posD, Chunk.VOXEL_COUNT+1)];
+
+				bool signA =              (voxA.value < iso);
+				bool edgeX = voxBValid && (voxA.value < iso) != (voxB.value < iso);
+				bool edgeY = voxCValid && (voxA.value < iso) != (voxC.value < iso);
+				bool edgeZ = voxDValid && (voxA.value < iso) != (voxD.value < iso);
+
+				int NV = Chunk.VOXEL_COUNT;
+
+				if (edgeX) {
+					var edgeIndex = AddEdge(data.edges, 0, index, signA, voxA, voxB, posA, posB, iso);
+					if (z < NV && y < NV) SetEdge(int3(x, y  , z  ),  0, edgeIndex); // mark active edge for this cell
+					if (z < NV && y >  1) SetEdge(int3(x, y-1, z  ),  1, edgeIndex); // mark active edge for the cells that edge also neighbours
+					if (z >  1 && y < NV) SetEdge(int3(x, y  , z-1),  2, edgeIndex);
+					if (z >  1 && y >  1) SetEdge(int3(x, y-1, z-1),  3, edgeIndex);
+				}
+				if (edgeY) {
+					var edgeIndex = AddEdge(data.edges, 1, index, !signA, voxA, voxC, posA, posC, iso); // !signA to flip y faces because unity is left handed y up and i usually think right-handed with z up, somewhere my though process caused the y faces to be flipped
+					if (z < NV && x < NV) SetEdge(int3(x  , y, z  ),  4, edgeIndex);
+					if (z < NV && x >  0) SetEdge(int3(x-1, y, z  ),  5, edgeIndex);
+					if (z >  0 && x < NV) SetEdge(int3(x  , y, z-1),  6, edgeIndex);
+					if (z >  0 && x >  0) SetEdge(int3(x-1, y, z-1),  7, edgeIndex);
+				}
+				if (edgeZ) {
+					var edgeIndex = AddEdge(data.edges, 2, index, signA, voxA, voxD, posA, posD, iso);
+					if (y < NV && x < NV) SetEdge(int3(x  , y  , z),  8, edgeIndex);
+					if (y < NV && x >  0) SetEdge(int3(x-1, y  , z),  9, edgeIndex);
+					if (y >  0 && x < NV) SetEdge(int3(x  , y-1, z), 10, edgeIndex);
+					if (y >  0 && x >  0) SetEdge(int3(x-1, y-1, z), 11, edgeIndex);
+				}
+			}
+			
+			unsafe float3 massPoint (int3 cellPos, Cell cell, out float3 normal) {
+				float3 avgPos = 0;
+				float3 avgNormal = 0;
+				int count = 0;
+			
+				for (int i=0; i<12; ++i) {
+					var edgeIndex = cell.getEdgeIndex(i);
+					if (edgeIndex > 0) {
+						var edge = data.edges[edgeIndex -1];
+						
+						avgPos += edge.pos;
+						avgNormal += edge.normal;
+						count++;
+					}
+				}
+
+				avgPos /= count;
+				avgNormal /= count;
+
+				normal = avgNormal;
+				return avgPos;
 			}
 
+			unsafe float3 DualContourIterative (int3 cellPos, Cell cell) {
+				// Instead of using a QEF solver, use a iterative method
+				// This is my approach of solving this, this is basicly gradient descent which is used in machine learning
+				// We know we want the best fit point based on a set of points with normals (called hermite?) which can be thought of as defining a plane
+				// There should (usually) be a point somewhere (maybe outside the cell) that is the global minimum of distances to these planes
+				// It seems Augusto Schmitz came up with something similar http://www.inf.ufrgs.br/~comba/papers/thesis/diss-leonardo.pdf - called Schimtz Particle Method by mattbick2003 - https://www.reddit.com/r/Unity3D/comments/bw6x1l/an_update_on_the_job_system_dual_contouring/
+			
+				float3 particle = massPoint(cellPos, cell, out float3 normal);
+				//float3 particle = (float3)cellPos + 0.5f;
+				//return particle;
 
-			//
+				//cell.normal = normal;
+			
+				int iter = 0;
+				while (iter++ < DCMaxIterations) {
+					float3 sumForce = 0;
+				
+					int count = 0;
+				
+					for (int i=0; i<12; ++i) {
+						var edgeIndex = cell.getEdgeIndex(i);
+						if (edgeIndex > 0) {
+							var edge = data.edges[edgeIndex -1];
+						
+							var posRel = particle - edge.pos;
+							
+							float signedDistance = dot(edge.normal, posRel);
+							float signedSqrError = signedDistance * abs(signedDistance);
+				
+							float3 force = signedSqrError * -edge.normal;
+				
+							sumForce += force;
+							count++;
+						}
+					}
+				
+					sumForce /= count;
+				
+					particle += sumForce * DCIterStrength;
+				
+					particle = clamp(particle, (float3)cellPos, (float3)(cellPos + 1));
+				}
+
+				return particle;
+			
+			Edge CalcEdge (Voxel voxA, Voxel voxB, float3 posA, float3 posB) {
+				float diff = voxB.value - voxA.value;
+
+				float t = (Iso - voxA.value) / diff; // approximate position of the isosurface by linear interpolation
+				
+				return new Edge {
+					//active = step(t, 0f) * (1f - step(t, 1f)),
+					active = t >= 0f && t < 1f,
+					pos = lerp(posA, posB, t),
+					normal = normalizesafe( lerp(voxA.gradient, voxB.gradient, t) )
+				};
+			}
+
+			struct Edges {
+				public Edge ex00;
+				public Edge ex10;
+				public Edge ex01;
+				public Edge ex11;
+				public Edge ey00;
+				public Edge ey10;
+				public Edge ey01;
+				public Edge ey11;
+				public Edge ez00;
+				public Edge ez10;
+				public Edge ez01;
+				public Edge ez11;
+
+				public Edge this [int i] {
+					get {
+						switch (i) {
+							case  0: return ex00;
+							case  1: return ex10;
+							case  2: return ex01;
+							case  3: return ex11;
+							case  4: return ey00;
+							case  5: return ey10;
+							case  6: return ey01;
+							case  7: return ey11;
+							case  8: return ez00;
+							case  9: return ez10;
+							case 10: return ez01;
+							case 11: return ez11;
+							default: return default;
+						}
+					}
+				}
+			}
+
+			float3 CalcCell (int x, int y, int z) {
+				int3 index = int3(x,y,z);
+				
+				int3 i000 = index              ;
+				int3 i100 = index + int3(1,0,0);
+				int3 i010 = index + int3(0,1,0);
+				int3 i110 = index + int3(1,1,0);
+				int3 i001 = index + int3(0,0,1);
+				int3 i101 = index + int3(1,0,1);
+				int3 i011 = index + int3(0,1,1);
+				int3 i111 = index + int3(1,1,1);
+
+				Voxel v000 = Voxels[_3dToFlatIndex(i000, Chunk.VOXELS + 2)];
+				Voxel v100 = Voxels[_3dToFlatIndex(i100, Chunk.VOXELS + 2)];
+				Voxel v010 = Voxels[_3dToFlatIndex(i010, Chunk.VOXELS + 2)];
+				Voxel v110 = Voxels[_3dToFlatIndex(i110, Chunk.VOXELS + 2)];
+				Voxel v001 = Voxels[_3dToFlatIndex(i001, Chunk.VOXELS + 2)];
+				Voxel v101 = Voxels[_3dToFlatIndex(i101, Chunk.VOXELS + 2)];
+				Voxel v011 = Voxels[_3dToFlatIndex(i011, Chunk.VOXELS + 2)];
+				Voxel v111 = Voxels[_3dToFlatIndex(i111, Chunk.VOXELS + 2)];
+				
+				Edges edges;
+				edges.ex00 = CalcEdge(v000, v100,  i000, i100);
+				edges.ex10 = CalcEdge(v010, v110,  i010, i110);
+				edges.ex01 = CalcEdge(v001, v101,  i001, i101);
+				edges.ex11 = CalcEdge(v011, v111,  i011, i111);
+				
+				edges.ey00 = CalcEdge(v000, v010,  i000, i010);
+				edges.ey10 = CalcEdge(v100, v110,  i100, i110);
+				edges.ey01 = CalcEdge(v001, v011,  i001, i011);
+				edges.ey11 = CalcEdge(v101, v111,  i101, i111);
+				
+				edges.ez00 = CalcEdge(v000, v001,  i000, i001);
+				edges.ez10 = CalcEdge(v100, v101,  i100, i101);
+				edges.ez01 = CalcEdge(v010, v011,  i010, i011);
+				edges.ez11 = CalcEdge(v110, v111,  i110, i111);
+				
+				return DualContourIterative(index, ref edges);
+			}
+			
+			float3 MassPoint (int3 cellPos, ref Edges edges, out float3 normal) {
+				float3 avgPos = 0;
+				float3 avgNormal = 0;
+				float count = 0;
+			
+				for (int i=0; i<12; ++i) {
+					var edge = edges[i];
+					if (edge.active) {
+						avgPos += edge.pos;
+						avgNormal += edge.normal;
+						count++;
+					}
+				}
+
+				avgPos /= count;
+				avgNormal /= count;
+
+				normal = avgNormal;
+				return avgPos;
+			}
+
+			float3 DualContourIterative (int3 cellPos, ref Edges edges) {
+				// Instead of using a QEF solver, use a iterative method
+				// This is my approach of solving this, this is basicly gradient descent which is used in machine learning
+				// We know we want the best fit point based on a set of points with normals (called hermite?) which can be thought of as defining a plane
+				// There should (usually) be a point somewhere (maybe outside the cell) that is the global minimum of distances to these planes
+				// It seems Augusto Schmitz came up with something similar http://www.inf.ufrgs.br/~comba/papers/thesis/diss-leonardo.pdf - called Schimtz Particle Method by mattbick2003 - https://www.reddit.com/r/Unity3D/comments/bw6x1l/an_update_on_the_job_system_dual_contouring/
+			
+				float3 particle = MassPoint(cellPos, ref edges, out float3 normal);
+				//float3 particle = (float3)cellPos + 0.5f;
+				//return particle;
+
+				//cell.normal = normal;
+			
+				int iter = 0;
+				while (iter++ < DCMaxIterations) {
+					float3 sumForce = 0;
+				
+					int count = 0;
+				
+					for (int i=0; i<12; ++i) {
+						var edge = edges[i];
+						if (edge.active) {
+							var posRel = particle - edge.pos;
+							
+							float signedDistance = dot(edge.normal, posRel);
+							float signedSqrError = signedDistance * abs(signedDistance);
+				
+							float3 force = signedSqrError * -edge.normal;
+				
+							sumForce += force;
+							count++;
+						}
+					}
+				
+					sumForce /= count;
+				
+					particle += sumForce * DCIterStrength;
+				
+					particle = clamp(particle, (float3)cellPos, (float3)(cellPos + 1));
+				}
+
+				return particle;
+			}
+			
+			public void Execute () {
+				int cells = Chunk.VOXELS + 1;
+
+				// Find active edges and cells
+				for (int z=0; z<cells; ++z) {
+					for (int y=0; y<cells; ++y) {
+						for (int x=0; x<cells; ++x) {
+							CalcCell(x,y,z);
+						}
+					}
+				}
+				
+				// Calculate vertices positions
+				for (int z=0; z<Chunk.VOXEL_COUNT; ++z) {
+					for (int y=0; y<Chunk.VOXEL_COUNT; ++y) {
+						for (int x=0; x<Chunk.VOXEL_COUNT; ++x) {
+							int3 index = int3(x,y,z);
+							if (data.GetActiveCell(index, out Cell cell)) {
+
+								float3 vertex = DualContourIterative(index, cell);
+
+								//vertex = clamp(vertex, (float3)index, (float3)(index + 1));
+
+								cell.vertex = vertex;
+								data.SetActiveCell(index, cell);
+							}
+						}
+					}
+				}
+				
+				float size = NodeSize / Chunk.VOXEL_COUNT;
+
+				// Output the face for each active edge
+				for (int i=0; i<data.edges.Length; ++i) {
+					var cell0 = data.edges[i].GetCellIndex(0);
+					var cell1 = data.edges[i].GetCellIndex(1);
+					var cell2 = data.edges[i].GetCellIndex(2);
+					var cell3 = data.edges[i].GetCellIndex(3);
+				
+					if (	all(cell0 >= 0 & cell0 < Chunk.VOXEL_COUNT) &&
+							all(cell1 >= 0 & cell1 < Chunk.VOXEL_COUNT) &&
+							all(cell2 >= 0 & cell2 < Chunk.VOXEL_COUNT) &&
+							all(cell3 >= 0 & cell3 < Chunk.VOXEL_COUNT)) {
+						if (data.edges[i].flipFace) {
+							data.EmitTriangle(cell0, cell1, cell2, size);
+							data.EmitTriangle(cell2, cell1, cell3, size);
+						} else {
+							data.EmitTriangle(cell1, cell0, cell3, size);
+							data.EmitTriangle(cell3, cell0, cell2, size);
+						}
+					}
+				}
+			}
+
 			public void EmitTriangle (Cell a, Cell b, Cell c, float cellSize, Color col) {
 				if (all(a.vertex == b.vertex) || all(a.vertex == c.vertex))
 					return; // degenerate triangle
@@ -140,15 +532,6 @@ namespace OctreeGeneration {
 				triangles.Add(indx++);
 				triangles.Add(indx++);
 				triangles.Add(indx++);
-			}
-			
-			public bool GetActiveCell (int3 index, out Cell cell) {
-				cell = cells[ _3dToFlatIndex(index, Chunk.VOXEL_COUNT) ];
-				return cell.active;
-			}
-			public void SetActiveCell (int3 index, Cell cell) {
-				cell.active = true;
-				cells[ _3dToFlatIndex(index, Chunk.VOXEL_COUNT) ] = cell;
 			}
 
 			public void EmitTriangle (int3 indxA, int3 indxB, int3 indxC, float cellSize) {
@@ -307,39 +690,6 @@ namespace OctreeGeneration {
 				}
 
 				//job.Neighbours.Dispose();
-			}
-		}
-		
-		public unsafe struct Cell {
-			public bool		active;
-			public float3	vertex;
-
-			// ex. Y is the direction the edge is going, 00 01 10 11 are the XZ components, 0 is lower 1 is the higher edge on that axis rel to cell
-			//public int[] = {
-			//			edgeX00, edgeX10, edgeX01, edgeX11,
-			//			edgeY00, edgeY10, edgeY01, edgeY11,
-			//			edgeZ00, edgeZ10, edgeZ01, edgeZ11 }
-			public fixed int edges[12];
-
-			public int getEdgeIndex (int i) {
-				return edges[i -1];
-			}
-		}
-
-		public struct Edge {
-			public int axis;
-			public int3 index; // where the edge is in the grid
-
-			public bool flipFace;
-
-			public float3 pos; // position of approximated iso crossing
-			public float3 normal; // normalized gradient at approximated iso crossing
-
-			public int3 GetCellIndex (int edge) {
-				var cellIndex = index;
-				cellIndex[axis == 0 ? 1 : 0] -= (edge >> 0) & 1;
-				cellIndex[axis == 2 ? 1 : 2] -= (edge >> 1) & 1;
-				return cellIndex;
 			}
 		}
 		
@@ -783,6 +1133,6 @@ namespace OctreeGeneration {
 				}
 			}
 		}
+				#endif
 	}
-	*/
 }

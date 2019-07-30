@@ -67,11 +67,11 @@ namespace OctreeGeneration {
 			return fsnoise(pos, 600, 3);
 		}
 		public Voxel Generate (float3 pos) {
-			//float3 normal = float3(1, 7, 2);
-			//return new Voxel {
-			//	distance = dot(pos, normal),
-			//	gradient = normal,
-			//};
+			float3 normal = float3(1, 7, 2);
+			return new Voxel {
+				value = dot(pos, normal),
+				gradient = normal,
+			};
 			
 			pos *= 12f; // for testing
 
@@ -143,15 +143,41 @@ namespace OctreeGeneration {
 		
 		TerrainGeneratorStruct terrainGenerator = new TerrainGeneratorStruct();
 		
+		public Job StartJob (Chunk c) {
+			var j = new Job();
+
+			int voxelCount = Chunk.VOXELS + 2;
+			int voxelCount3 = voxelCount * voxelCount * voxelCount;
+
+			c.Voxels = new NativeArray<Voxel>(voxelCount3, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+
+			var job = new _Job {
+				ChunkPos = c.Corner,
+				Gen = terrainGenerator,
+				Voxels = c.Voxels
+			};
+
+			j.Handle = job.Schedule(voxelCount3, voxelCount * voxelCount);
+
+			return j;
+		}
+
+		public class Job {
+			public JobHandle Handle;
+			
+			public bool IsCompleted => Handle.IsCompleted;
+			public void Complete () => Handle.Complete();
+		}
+		
 		[BurstCompile]
-		struct Job : IJobParallelFor {
+		struct _Job : IJobParallelFor {
 			[ReadOnly] public float3 ChunkPos;
 			[ReadOnly] public TerrainGeneratorStruct Gen;
 		
 			[WriteOnly] public NativeArray<Voxel> Voxels;
 
 			public void Execute (int i) {
-				int3 voxelCoord = flatTo3dIndex(i, Chunk.VOXELS);
+				int3 voxelCoord = flatTo3dIndex(i, Chunk.VOXELS + 2) - 1;
 
 				float3 pos_world = (float3)voxelCoord;
 				pos_world *= Chunk.VOXEL_SIZE;
@@ -159,20 +185,6 @@ namespace OctreeGeneration {
 						
 				Voxels[i] = Gen.Generate(pos_world);
 			}
-		}
-
-		public JobHandle StartJob (Chunk c) {
-			int voxelCount = Chunk.VOXELS * Chunk.VOXELS * Chunk.VOXELS;
-
-			c.Voxels = new NativeArray<Voxel>(voxelCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-
-			var job = new Job {
-				ChunkPos = c.Corner,
-				Gen = terrainGenerator,
-				Voxels = c.Voxels
-			};
-
-			return job.Schedule(voxelCount, Chunk.VOXELS * Chunk.VOXELS);
 		}
 	}
 }

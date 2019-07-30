@@ -1,0 +1,30 @@
+﻿design considerations:
+
+should voxels be stored sparse (in ram, ex. octree or similar)
+since i want to be able to dig into walls and have material transitions be there?
+-> non-sparse for now for simplicity
+-> octree (or other divisions per axis like 4x4x4 for fewer levels) would work too, if each cube becomes a leaf if all it's children are the same material
+
+voxels are currently generated based on noise functions, although this might change or hybrid noise and iterative approaches might be used later
+-> with noise i currently have a value (distance to rock-air transition (ie. + is air, - is rock) and the gradient in direction of the air)
+-> the distance is probably not needed for the game itself but...
+-> the dual contouring meshings relies on value data (to find initial vertex positions) and gradient data (to refine those vertex positions to better fit sharp edges and curved surfaces)
+-> material ids (air = 0) can be generated from this data can be used to have different materials
+-> if smooth transitions between materials are desired (if air is a material then this is actually required to have smooth surfaces at all)
+    multiple materials per voxel could be implented like this:
+	 struct Voxel:
+	   int		matId1;
+	   float	matAmount1;
+	   int		matId2;
+	   float	matAmount2;
+	   int		matId3;
+	   float	matAmount2;
+	which the meshing algo should be able to use
+	alternativly:
+	struct Voxel:
+	   float	surfDist;
+	   float3	surfGradient;
+	   int		matId1;
+	   float	matAmount1;
+	   int		matId2;
+	   float	matAmount2;
