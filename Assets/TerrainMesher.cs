@@ -124,9 +124,9 @@ namespace OctreeGeneration {
 				triangles = j.MeshData.triangles,	
 			};
 			
-			var findSurfaceH = findSurface  .ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, VOXELS * VOXELS, terrGen?.Handle ?? default);
+			var findSurfaceH = findSurface  .ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, 64, terrGen?.Handle ?? default);
 			var calcEdgesH	 = calcEdges    .Schedule(findSurfaceH);
-			var calcVertsH	 = calcVertices .Schedule(c.SurfaceCells, CELLS, calcEdgesH);
+			var calcVertsH	 = calcVertices .Schedule(c.SurfaceCells, 64, calcEdgesH);
 			j.FinalJob		 = genMesh      .Schedule(calcVertsH);
 			return j;
 		}
@@ -163,6 +163,7 @@ namespace OctreeGeneration {
 			[ReadOnly] public NativeArray<Voxel> Voxels;
 			
 			public bool Execute (int edgePosFlat) {
+				#if false
 				int axis = edgePosFlat / EDGES_PER_AXIS;
 				edgePosFlat %= EDGES_PER_AXIS;
 				
@@ -177,6 +178,26 @@ namespace OctreeGeneration {
 				float b = Voxels[_3dToFlatIndex(ib, Chunk.VOXELS + 2)].value;
 				
 				return a < ISO != b < ISO;
+				#else
+				int axis = edgePosFlat / EDGES_PER_AXIS;
+				edgePosFlat %= EDGES_PER_AXIS;
+				
+				int3 size = VOXELS;
+				size[axis] -= 1;
+
+				int3 ia = flatTo3dIndex(edgePosFlat, size);
+
+				int3 offs = 0;
+				offs[axis] = 1;
+
+				int indxA = _3dToFlatIndex(ia, Chunk.VOXELS + 2);
+				int indxB = indxA + _3dToFlatIndex(offs, Chunk.VOXELS + 2);
+
+				float a = Voxels[indxA].value;
+				float b = Voxels[indxB].value;
+				
+				return a < ISO != b < ISO;
+				#endif
 			}
 		}
 		
