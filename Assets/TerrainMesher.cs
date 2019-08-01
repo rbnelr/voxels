@@ -96,13 +96,25 @@ namespace OctreeGeneration {
 			var findSurface = new FindSurfaceEdgesJob {
 				Voxels = c.Voxels,
 			};
+			var calcEdges = new CalcEdgesJob {
+				Voxels = c.Voxels,
+				SurfaceEdgePositions = c.SurfaceEdgePositions,
+
+				SurfaceEdges = c.SurfaceEdges,
+				SurfaceCells = c.SurfaceCells,
+				Cells = c.Cells,
+			};
 			var calcVertices = new CalcVerticesJob {
 				DCIterStrength = DCIterStrength,
 				DCMaxIterations = DCMaxIterations,
-				Voxels = c.Voxels,
-				SurfaceEdgePositions = c.SurfaceEdgePositions,
 				SurfaceEdges = c.SurfaceEdges,
 				SurfaceCells = c.SurfaceCells,
+
+				Cells = c.Cells,
+			};
+			var genMesh = new GenerateMeshJob {
+				SurfaceEdgePositions = c.SurfaceEdgePositions,
+				SurfaceEdges = c.SurfaceEdges,
 				Cells = c.Cells,
 				
 				vertices  = j.MeshData.vertices ,	
@@ -112,19 +124,21 @@ namespace OctreeGeneration {
 				triangles = j.MeshData.triangles,	
 			};
 			
-			var findSurfaceH = findSurface.ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, VOXELS * VOXELS, terrGen?.Handle ?? default);
-			j.CalcVertices = calcVertices.Schedule(findSurfaceH);
+			var findSurfaceH = findSurface  .ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, VOXELS * VOXELS, terrGen?.Handle ?? default);
+			var calcEdgesH	 = calcEdges    .Schedule(findSurfaceH);
+			var calcVertsH	 = calcVertices .Schedule(c.SurfaceCells, CELLS, calcEdgesH);
+			j.FinalJob		 = genMesh      .Schedule(calcVertsH);
 			return j;
 		}
 		
 		public class Job {
 			public Chunk chunk;
-			public JobHandle CalcVertices;
+			public JobHandle FinalJob;
 			public MeshData MeshData;
 			
-			public bool IsCompleted => CalcVertices.IsCompleted;
+			public bool IsCompleted => FinalJob.IsCompleted;
 			public void Complete () {
-				CalcVertices.Complete();
+				FinalJob.Complete();
 				if (!chunk.IsDestroyed)
 					MeshData.SetMesh(chunk.mesh);
 				MeshData.Dispose();
@@ -167,21 +181,77 @@ namespace OctreeGeneration {
 		}
 		
 		[BurstCompile]
-		public struct CalcVerticesJob : IJob {
-			[ReadOnly] public float DCIterStrength;
-			[ReadOnly] public int DCMaxIterations;
+		public struct CalcEdgesJob : IJob {
 			[ReadOnly] public NativeArray<Voxel> Voxels;
 			[ReadOnly] public NativeList<int> SurfaceEdgePositions;
 			public NativeList<Edge> SurfaceEdges;
 			public NativeList<int> SurfaceCells;
 			public NativeArray<Cell> Cells;
 			
-			[WriteOnly] public NativeList<float3> vertices;
-			[WriteOnly] public NativeList<float3> normals;
-			[WriteOnly] public NativeList<float2> uv;
-			[WriteOnly] public NativeList<Color>  colors;
-			public NativeList<int>    triangles;
-			
+			public unsafe void Execute () {
+				for (int i=0; i<SurfaceEdgePositions.Length; ++i) {
+					int edgePosFlat = SurfaceEdgePositions[i];
+					
+					int axis = edgePosFlat / EDGES_PER_AXIS;
+					edgePosFlat %= EDGES_PER_AXIS;
+				
+					int3 size = VOXELS;
+					size[axis] -= 1;
+
+					{
+						int3 ia = flatTo3dIndex(edgePosFlat, size);
+						int3 ib = ia;
+						ib[axis] += 1;
+
+						var a = Voxels[_3dToFlatIndex(ia, Chunk.VOXELS + 2)];
+						var b = Voxels[_3dToFlatIndex(ib, Chunk.VOXELS + 2)];
+				
+						float t = unlerp(a.value, b.value, ISO); // a.value != b.value because then the edge would no be a surface edge
+
+						// flip faces for y axis, I can't figure out where i made an assumption of a right handed coord system, but for some reason the y edge faces are the wrong way around
+						bool flip = axis == 1;
+
+						Edge e;
+						e.flip = (a.value > b.value) ^ flip; 
+						e.pos = lerp((float3)ia, (float3)ib, t) - 0.5f;
+						e.normal = normalizesafe(lerp(a.gradient, b.gradient, t));
+						
+						SurfaceEdges.Add(e);
+					}
+		
+					int3 edgePos = flatTo3dIndex(edgePosFlat, size);
+					
+					int j = axis > 0 ? 0 : 1;
+					int k = axis < 2 ? 2 : 1;
+
+					for (int cell_i=0; cell_i<4; ++cell_i) {
+						int3 cellPos = edgePos;
+						cellPos[j] -= cell_i & 1;
+						cellPos[k] -= cell_i >> 1;
+						if (cellPos[j] >= 0 && cellPos[k] >= 0 && cellPos[j] < CELLS && cellPos[k] < CELLS) {
+							int cellPosFlat = _3dToFlatIndex(cellPos, CELLS);
+							var cell = Cells[cellPosFlat];
+
+							if (cell.surfaceEdges == 0)
+								SurfaceCells.Add(cellPosFlat);
+
+							cell.edges[cell.surfaceEdges++] = i;
+
+							Cells[cellPosFlat] = cell;
+						}
+					}
+				}
+			}
+		}
+
+		[BurstCompile]
+		public struct CalcVerticesJob : IJobParallelForDefer {
+			[ReadOnly] public float DCIterStrength;
+			[ReadOnly] public int DCMaxIterations;
+			[ReadOnly] public NativeList<Edge> SurfaceEdges;
+			[ReadOnly] public NativeList<int> SurfaceCells;
+			public NativeArray<Cell> Cells;
+		
 			unsafe float3 MassPoint (Cell cell, out float3 normal) {
 				float3 avgPos = 0;
 				float3 avgNormal = 0;
@@ -242,6 +312,29 @@ namespace OctreeGeneration {
 				return particle;
 			}
 			
+			public void Execute (int i) {
+				int indexFlat = SurfaceCells[i];
+					
+				int3 cellPos = flatTo3dIndex(indexFlat, CELLS);
+		
+				var cell = Cells[indexFlat];
+				cell.vertex = DualContourIterative(cell, cellPos);
+				Cells[indexFlat] = cell;
+			}
+		}
+
+		[BurstCompile]
+		public struct GenerateMeshJob : IJob {
+			[ReadOnly] public NativeList<int> SurfaceEdgePositions;
+			[ReadOnly] public NativeList<Edge> SurfaceEdges;
+			[ReadOnly] public NativeArray<Cell> Cells;
+			
+			[WriteOnly] public NativeList<float3> vertices;
+			[WriteOnly] public NativeList<float3> normals;
+			[WriteOnly] public NativeList<float2> uv;
+			[WriteOnly] public NativeList<Color>  colors;
+			public NativeList<int>    triangles;
+			
 			Cell GetCell (int3 edgePos, int j, int k, int cell_i) {
 				int3 cellPos = edgePos;
 				cellPos[j] -= cell_i & 1;
@@ -284,70 +377,7 @@ namespace OctreeGeneration {
 				triangles.Add(indx++);
 			}
 
-			public unsafe void Execute () {
-				for (int i=0; i<SurfaceEdgePositions.Length; ++i) {
-					int edgePosFlat = SurfaceEdgePositions[i];
-					
-					int axis = edgePosFlat / EDGES_PER_AXIS;
-					edgePosFlat %= EDGES_PER_AXIS;
-				
-					int3 size = VOXELS;
-					size[axis] -= 1;
-
-					{
-						int3 ia = flatTo3dIndex(edgePosFlat, size);
-						int3 ib = ia;
-						ib[axis] += 1;
-
-						var a = Voxels[_3dToFlatIndex(ia, Chunk.VOXELS + 2)];
-						var b = Voxels[_3dToFlatIndex(ib, Chunk.VOXELS + 2)];
-				
-						float t = unlerp(a.value, b.value, ISO); // a.value != b.value because then the edge would no be a surface edge
-
-						// flip faces for y axis, I can't figure out where i made an assumption of a right handed coord system, but for some reason the y edge faces are the wrong way around
-						bool flip = axis == 1;
-
-						Edge e;
-						e.flip = (a.value > b.value) ^ flip; 
-						e.pos = lerp((float3)ia, (float3)ib, t) - 0.5f;
-						e.normal = normalizesafe(lerp(a.gradient, b.gradient, t));
-						
-						SurfaceEdges.Add(e);
-					}
-		
-					int3 edgePos = flatTo3dIndex(edgePosFlat, size);
-					
-					int j = axis > 0 ? 0 : 1;
-					int k = axis < 2 ? 2 : 1;
-
-					for (int cell_i=0; cell_i<4; ++cell_i) {
-						int3 cellPos = edgePos;
-						cellPos[j] -= cell_i & 1;
-						cellPos[k] -= cell_i >> 1;
-						if (cellPos[j] >= 0 && cellPos[k] >= 0 && cellPos[j] < CELLS && cellPos[k] < CELLS) {
-							int cellPosFlat = _3dToFlatIndex(cellPos, CELLS);
-							var cell = Cells[cellPosFlat];
-
-							if (cell.surfaceEdges == 0)
-								SurfaceCells.Add(cellPosFlat);
-
-							cell.edges[cell.surfaceEdges++] = i;
-
-							Cells[cellPosFlat] = cell;
-						}
-					}
-				}
-
-				for (int i=0; i<SurfaceCells.Length; ++i) {
-					int indexFlat = SurfaceCells[i];
-					
-					int3 cellPos = flatTo3dIndex(indexFlat, CELLS);
-
-					var cell = Cells[indexFlat];
-					cell.vertex = DualContourIterative(cell, cellPos);
-					Cells[indexFlat] = cell;
-				}
-				
+			public void Execute () {
 				for (int i=0; i<SurfaceEdgePositions.Length; ++i) {
 					int edgePosFlat = SurfaceEdgePositions[i];
 					var edge = SurfaceEdges[i];
