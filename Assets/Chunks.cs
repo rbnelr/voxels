@@ -99,15 +99,20 @@ namespace OctreeGeneration {
 				genJob?.Complete();
 				meshJob?.Complete();
 				chunkInProcess.done = true;
-			
+				
 				chunkInProcess = null;
+				genJob = null;
+				meshJob = null;
 			}
 		}
 
 		void OnDestroy () {
 			genJob?.Complete();
 			meshJob?.Complete();
+
 			chunkInProcess = null;
+			genJob = null;
+			meshJob = null;
 
 			foreach (var c in chunks.Values) {
 				c.Dispose();

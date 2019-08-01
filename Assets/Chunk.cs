@@ -39,8 +39,8 @@ namespace OctreeGeneration {
 	}
 
 	public class Chunk {
-		public const float VOXEL_SIZE = 1f; // Size of one voxel cell
-		public const int VOXELS = 8; // Voxels per axis
+		public const float VOXEL_SIZE = 2f; // Size of one voxel cell
+		public const int VOXELS = 32; // Voxels per axis
 		public const float SIZE = VOXELS * VOXEL_SIZE; // size of the chunk on one axis
 		
 		public readonly int3 Index; // unique index of chunk
@@ -55,7 +55,10 @@ namespace OctreeGeneration {
 
 		public NativeArray<Voxel> Voxels;
 		//public TerrainMesher.Data MesherData;
-		public NativeList<int> SurfaceEdges;
+		public NativeList<int> SurfaceEdgePositions;
+		public NativeList<TerrainMesher.Edge> SurfaceEdges;
+		public NativeArray<TerrainMesher.Cell> Cells;
+		public NativeList<int> SurfaceCells;
 		public bool done = false; //
 
 		public bool IsDestroyed => Go == null;
@@ -84,20 +87,50 @@ namespace OctreeGeneration {
 
 			if (Voxels.IsCreated)
 				Voxels.Dispose();
+			if (SurfaceEdgePositions.IsCreated)
+				SurfaceEdgePositions.Dispose();
 			if (SurfaceEdges.IsCreated)
 				SurfaceEdges.Dispose();
+			if (Cells.IsCreated)
+				Cells.Dispose();
+			if (SurfaceCells.IsCreated)
+				SurfaceCells.Dispose();
 		}
 		
-		const int EDGES_PER_AXIS = (Chunk.VOXELS + 2) * (Chunk.VOXELS + 2) * (Chunk.VOXELS + 1);
-		const int EDGES_TOTAL = EDGES_PER_AXIS * 3;
+		///////////////
+		const int _VOXELS_ = Chunk.VOXELS + 2; // Voxels actually generated per chunk
+		
+		// Dual contouring edges are the connections between voxels
+		// If there is a ISO crossing on this line (one voxel < ISO other >= ISO) this edge is a surface edge and will generate a quad
+		const int EDGES_PER_AXIS = _VOXELS_ * _VOXELS_ * (_VOXELS_ - 1); // How many edges in chunk (lines between voxels) per direction of edge (xyz)
+		const int EDGES_TOTAL = EDGES_PER_AXIS * 3; // How many edges in chunk total
+		
+		// Dual contouring cells contain a vertex that is places based on the surface edges
+		// the corners of the cell are voxels, the edges are the edges above
+		const int CELLS = Chunk.VOXELS + 1;
+		const int CELLS_TOTAL = CELLS * CELLS * CELLS;
+		
 		public void DrawGizmos () {
 			Gizmos.color = Color.green;
 			Gizmos.DrawWireCube(Center, (float3)SIZE);
 
-			if (done) {
+			if (done && false) {
+				
+				Gizmos.color = Color.blue;
+				for (int i=0; i<SurfaceCells.Length; ++i) {
+					int index = SurfaceCells[i];
+					var cell = Cells[index];
+					
+					int3 pos = flatTo3dIndex(index, CELLS);
+					
+					Gizmos.DrawWireCube((float3)pos * VOXEL_SIZE + Corner, (float3)VOXEL_SIZE);
+					Gizmos.DrawWireCube(cell.vertex * VOXEL_SIZE + Corner, (float3)0.1f);
+				}
+
 				Gizmos.color = Color.red;
-				for (int i=0; i<SurfaceEdges.Length; ++i) {
-					int index = SurfaceEdges[i];
+				for (int i=0; i<SurfaceEdgePositions.Length; ++i) {
+					int index = SurfaceEdgePositions[i];
+					var edge = SurfaceEdges[i];
 			
 					int axis = index / EDGES_PER_AXIS;
 					index %= EDGES_PER_AXIS;
@@ -110,6 +143,23 @@ namespace OctreeGeneration {
 					ib[axis] += 1;
 				
 					Gizmos.DrawLine(((float3)ia - 0.5f) * VOXEL_SIZE + Corner, ((float3)ib - 0.5f) * VOXEL_SIZE + Corner);
+				}
+				Gizmos.color = Color.black;
+				for (int i=0; i<SurfaceEdgePositions.Length; ++i) {
+					int index = SurfaceEdgePositions[i];
+					var edge = SurfaceEdges[i];
+				
+					int axis = index / EDGES_PER_AXIS;
+					index %= EDGES_PER_AXIS;
+				
+					int3 size = VOXELS + 2;
+					size[axis] -= 1;
+				
+					int3 ia = flatTo3dIndex(index, size);
+					int3 ib = ia;
+					ib[axis] += 1;
+				
+					Gizmos.DrawRay(edge.pos * Chunk.VOXEL_SIZE + Corner, edge.normal * 0.4f * VOXEL_SIZE);
 				}
 			}
 		}

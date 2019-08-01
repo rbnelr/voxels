@@ -232,7 +232,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8804607c774423a4cb61202f61439da4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  LoadRadius: 34
+  LoadRadius: 35
   ChunkPrefab: {fileID: 1667098945258162, guid: 75efd82628e77834c9cb60951fc8a288,
     type: 3}
   Player: {fileID: 1375430559}
