@@ -287,7 +287,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 2
+    m_Type: 0
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
@@ -397,6 +397,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1375430560}
   - component: {fileID: 1375430561}
+  - component: {fileID: 1375430562}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -432,7 +433,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f77b90c9d8edffc4786efb7248a16ef5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  BaseSpeed: 1
+  BaseSpeed: 4
   FastSpeedMultiplier: 4
   MouselookSensitiviy: 0.01
   MouselookAng:
@@ -440,6 +441,18 @@ MonoBehaviour:
     y: 0
   TestFall: 0
   TestFallSpeed: -50
+--- !u!114 &1375430562
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1375430559}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ffced64aef0178d4f9b80283c2ec6ea3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1687319026
 GameObject:
   m_ObjectHideFlags: 0

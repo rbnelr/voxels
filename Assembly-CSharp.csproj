@@ -65,6 +65,7 @@
     <Compile Include="Assets\MeshExt.cs" />
     <Compile Include="Assets\NoiseExt.cs" />
     <Compile Include="Assets\Player.cs" />
+    <Compile Include="Assets\PlayerDigging.cs" />
     <Compile Include="Assets\TerrainGenerator.cs" />
     <Compile Include="Assets\TerrainMesher.cs" />
     <None Include="Assets\Terrain.shader" />
