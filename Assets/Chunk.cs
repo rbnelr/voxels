@@ -58,10 +58,12 @@ public class Chunk {
 	public NativeList<TerrainMesher.Edge> SurfaceEdges;
 	public NativeArray<TerrainMesher.Cell> Cells;
 	public NativeList<int> SurfaceCells;
-	public bool done = false; //
+
+	public bool Done = false;
+	public bool DeferRemesh = false;
 
 	public bool IsDestroyed => Go == null;
-		
+	
 	public Chunk (int3 index, GameObject Prefab, Transform goHierachy) {
 		this.Index = index;
 			
@@ -83,9 +85,14 @@ public class Chunk {
 			
 		Object.Destroy(Go);
 		Go = null;
-
+		
 		if (Voxels.IsCreated)
 			Voxels.Dispose();
+
+		DisposeMeshing();
+	}
+
+	public void DisposeMeshing () {
 		if (SurfaceEdgePositions.IsCreated)
 			SurfaceEdgePositions.Dispose();
 		if (SurfaceEdges.IsCreated)
@@ -113,7 +120,7 @@ public class Chunk {
 		Gizmos.color = Color.green;
 		Gizmos.DrawWireCube(Center, (float3)SIZE);
 
-		if (done && false) {
+		if (Done && false) {
 				
 			Gizmos.color = Color.blue;
 			for (int i=0; i<SurfaceCells.Length; ++i) {

@@ -62,6 +62,7 @@
   <ItemGroup>
     <Compile Include="Assets\Chunk.cs" />
     <Compile Include="Assets\Chunks.cs" />
+    <Compile Include="Assets\DiggingTest.cs" />
     <Compile Include="Assets\MeshExt.cs" />
     <Compile Include="Assets\NoiseExt.cs" />
     <Compile Include="Assets\Player.cs" />

@@ -21,7 +21,7 @@ public class Chunks : MonoBehaviour {
 		
 	public bool AlwaysDrawChunks = false;
 
-	Dictionary<int3, Chunk> chunks = new Dictionary<int3, Chunk>();
+	public Dictionary<int3, Chunk> chunks = new Dictionary<int3, Chunk>();
 		
 	bool shouldBeLoaded (int3 index, out float dist) {
 		var nearest = clamp(playerPos, (float3)index * Chunk.SIZE, (float3)(index + 1) * Chunk.SIZE);
@@ -56,6 +56,10 @@ public class Chunks : MonoBehaviour {
 				UpdateChunk(c, ref chunkToProcess);
 			else
 				toRemove.Add(c);
+
+			if (c.DeferRemesh && chunkToProcess == null) {
+				chunkToProcess = c;
+			}
 		}
 
 		StartChunkProcessing(chunkToProcess);
@@ -89,15 +93,21 @@ public class Chunks : MonoBehaviour {
 		if (chunkInProcess == null && c != null) {
 			chunkInProcess = c;
 
-			genJob = TerrainGenerator.StartJob(c);
+			c.DisposeMeshing();
+
+			if (!c.DeferRemesh)
+				genJob = TerrainGenerator.StartJob(c);
+
 			meshJob = TerrainMesher.StartJob(c, genJob);
+			
+			c.DeferRemesh = false;
 		}
 	}
 	void FinishChunkProcessing () {
 		if (chunkInProcess != null && (genJob?.IsCompleted ?? true) && (meshJob?.IsCompleted ?? true)) {
 			genJob?.Complete();
 			meshJob?.Complete();
-			chunkInProcess.done = true;
+			chunkInProcess.Done = true;
 				
 			chunkInProcess = null;
 			genJob = null;
