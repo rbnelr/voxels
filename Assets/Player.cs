@@ -10,6 +10,7 @@ namespace Prototyping {
 
 		public float MouselookSensitiviy = 1f / 100f; // screen radii per mouse input units
 		
+		public bool Mouselook = true;
 		public float2 MouselookAng = float2(0,0);
 
 		public bool TestFall = false;
@@ -37,7 +38,14 @@ namespace Prototyping {
 				Cursor.visible = true;
 				Cursor.lockState = CursorLockMode.None;
 			}
-			if (Input.GetKey(KeyCode.Mouse1)) {
+			
+			if (Input.GetKey(KeyCode.F2))
+				Mouselook = !Mouselook;
+
+			Cursor.lockState = Mouselook ? CursorLockMode.Locked : CursorLockMode.None;
+			Cursor.visible = !Mouselook;
+
+			if (Mouselook) {
 				float mouseMult = MouselookSensitiviy * cam.fieldOfView / 2;
 				MouselookAng += mouseMult * float2(Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y"));
 				MouselookAng.x = fmod(MouselookAng.x, 360f);
