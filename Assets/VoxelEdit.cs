@@ -13,8 +13,8 @@ class VoxelEdit {
 		return dist <= sphereRadius;
 	}
 
-	public static void SubstractSphere (Chunks Chunks, float3 pos, float radius) {
-		foreach (var c in Chunks.chunks.Values) {
+	public static void SubstractSphere (float3 pos, float radius) {
+		foreach (var c in Chunks.Instance.chunks.Values) {
 			if (Intersect(c.Corner, Chunk.SIZE, pos, radius)) {
 				SubstractSphere(c, pos, radius);
 			}

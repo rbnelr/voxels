@@ -10,7 +10,7 @@ public class DiggingTest : MonoBehaviour {
 
 	void Update () {
 		if (Input.GetMouseButtonDown(0)) {
-			VoxelEdit.SubstractSphere(Chunks, transform.position, Radius);
+			VoxelEdit.SubstractSphere(transform.position, Radius);
 		}
 	}
 

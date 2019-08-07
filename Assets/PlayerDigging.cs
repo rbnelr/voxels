@@ -4,8 +4,6 @@ using static Unity.Mathematics.math;
 
 public class PlayerDigging : MonoBehaviour {
 	
-	public Chunks Chunks;
-
 	public float Reach = 4f;
 	public float Radius = 1f;
 
@@ -25,7 +23,7 @@ public class PlayerDigging : MonoBehaviour {
 		if (Input.GetMouseButtonDown(0) && CanDig) {
 			var chunk = hit.transform.GetComponent<Chunk>();
 			if (chunk != null) {
-				VoxelEdit.SubstractSphere(Chunks, hit.point, Radius);
+				VoxelEdit.SubstractSphere(hit.point, Radius);
 			}
 			
 			var rigidbody = hit.transform.GetComponent<Rigidbody>();

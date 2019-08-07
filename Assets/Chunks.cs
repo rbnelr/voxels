@@ -8,7 +8,12 @@ using UnityEngine.Profiling;
 using static Unity.Mathematics.math;
 
 public class Chunks : MonoBehaviour {
-		
+
+	public static Chunks Instance;
+	private void Start () {
+		Instance = this;
+	}
+
 	public float LoadRadius = 200;
 		
 	public GameObject ChunkPrefab;
