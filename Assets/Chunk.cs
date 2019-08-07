@@ -37,19 +37,18 @@ public struct Voxel {
 	}
 }
 
-public class Chunk {
+public class Chunk : MonoBehaviour {
 	public const float VOXEL_SIZE = 2f; // Size of one voxel cell
 	public const int VOXELS = 32; // Voxels per axis
 	public const float SIZE = VOXELS * VOXEL_SIZE; // size of the chunk on one axis
 		
-	public readonly int3 Index; // unique index of chunk
+	public int3 Index; // unique index of chunk
 		
 	public float LatestDist = 0;
 
 	public float3 Corner => (float3)Index * SIZE; // world position (lower corner of chunk)
 	public float3 Center => ((float3)Index + 0.5f) * SIZE; // world position (center of chunk)
-		
-	public GameObject Go;
+	
 	public Mesh mesh;
 
 	public NativeArray<Voxel> Voxels;
@@ -62,29 +61,29 @@ public class Chunk {
 	public bool Done = false;
 	public bool DeferRemesh = false;
 
-	public bool IsDestroyed => Go == null;
+	bool _disposed = false;
+	public bool IsDestroyed => _disposed;
 	
-	public Chunk (int3 index, GameObject Prefab, Transform goHierachy) {
-		this.Index = index;
-			
-		Go = Object.Instantiate(Prefab, Corner, Quaternion.identity, goHierachy);
+	public MeshCollider MeshCollider;
+
+	void Start () {
+		MeshCollider = GetComponent<MeshCollider>();
 
 		{
 			mesh = new Mesh();
 			mesh.name = "Chunk Mesh";
 			mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-			Go.GetComponent<MeshFilter>().mesh = mesh;
+			GetComponent<MeshFilter>().sharedMesh = mesh;
+			MeshCollider.sharedMesh = mesh;
 		}
 	}
 
 	public void Dispose () {
+		_disposed = true;
 			
 		if (mesh != null)
 			Object.Destroy(mesh);
 		mesh = null;
-			
-		Object.Destroy(Go);
-		Go = null;
 		
 		if (Voxels.IsCreated)
 			Voxels.Dispose();

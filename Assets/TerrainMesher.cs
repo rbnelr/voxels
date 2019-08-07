@@ -40,7 +40,7 @@ public class MeshData {
 		if (triangles .IsCreated) triangles .Dispose();
 	}
 		
-	public void SetMesh (Mesh mesh) {
+	public void SetMesh (Chunk chunk, Mesh mesh) {
 		
 		Profiler.BeginSample("TerrainNode.AssignMesh");
 		mesh.Clear();
@@ -60,6 +60,8 @@ public class MeshData {
 				mesh.SetTrianglesNative(triangles, 0, ref trianglesBuf);
 			Profiler.EndSample();
 		Profiler.EndSample();
+		
+		chunk.MeshCollider.sharedMesh = mesh;
 	}
 }
 
@@ -138,7 +140,7 @@ public class TerrainMesher : MonoBehaviour {
 		public void Complete () {
 			FinalJob.Complete();
 			if (!chunk.IsDestroyed)
-				MeshData.SetMesh(chunk.mesh);
+				MeshData.SetMesh(chunk, chunk.mesh);
 			MeshData.Dispose();
 		}
 	}

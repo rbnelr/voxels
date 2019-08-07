@@ -66,6 +66,7 @@ public class Chunks : MonoBehaviour {
 			
 		foreach (var c in toRemove) {
 			c.Dispose();
+			Destroy(c);
 			chunks.Remove(c.Index);
 		}
 	}
@@ -74,7 +75,8 @@ public class Chunks : MonoBehaviour {
 		if (chunks.ContainsKey(index))
 			return;
 
-		var c = new Chunk(index, ChunkPrefab, this.transform);
+		var c = Instantiate(ChunkPrefab, (float3)index * Chunk.SIZE, Quaternion.identity, this.transform).GetComponent<Chunk>();
+		c.Index = index;
 		chunks.Add(index, c);
 	}
 
@@ -125,6 +127,7 @@ public class Chunks : MonoBehaviour {
 
 		foreach (var c in chunks.Values) {
 			c.Dispose();
+			Destroy(c);
 		}
 		chunks.Clear();
 	}

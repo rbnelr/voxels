@@ -67,8 +67,10 @@
     <Compile Include="Assets\NoiseExt.cs" />
     <Compile Include="Assets\Player.cs" />
     <Compile Include="Assets\PlayerDigging.cs" />
+    <Compile Include="Assets\ShootObject.cs" />
     <Compile Include="Assets\TerrainGenerator.cs" />
     <Compile Include="Assets\TerrainMesher.cs" />
+    <Compile Include="Assets\VoxelEdit.cs" />
     <None Include="Assets\Terrain.shader" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
