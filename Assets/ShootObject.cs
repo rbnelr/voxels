@@ -40,5 +40,6 @@ public class ShootObject : MonoBehaviour {
 		float3 dir = cam.transform.TransformDirection(0, 0, 1);
 
 		go.GetComponent<Rigidbody>().velocity = dir * velocity;
+		go.GetComponent<Rigidbody>().angularVelocity = UnityEngine.Random.insideUnitSphere * 360 * 2;
 	}
 }
