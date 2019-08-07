@@ -38,7 +38,7 @@ public struct Voxel {
 }
 
 public class Chunk : MonoBehaviour {
-	public const float VOXEL_SIZE = 2f; // Size of one voxel cell
+	public const float VOXEL_SIZE = 0.5f; // Size of one voxel cell
 	public const int VOXELS = 32; // Voxels per axis
 	public const float SIZE = VOXELS * VOXEL_SIZE; // size of the chunk on one axis
 		
