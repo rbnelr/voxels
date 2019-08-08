@@ -16,6 +16,7 @@ namespace Prototyping {
 		public bool TestFall = false;
 		public float TestFallSpeed = -50f;
 
+		public GameObject Head;
 		Camera cam;
 	
 		void Awake () {
@@ -51,7 +52,8 @@ namespace Prototyping {
 				MouselookAng.x = fmod(MouselookAng.x, 360f);
 				MouselookAng.y = clamp(MouselookAng.y, -90, +90);
 
-				transform.eulerAngles = float3(MouselookAng.y, MouselookAng.x, 0);
+				Head.transform.localEulerAngles = float3(MouselookAng.y, 0, 0);
+				transform.localEulerAngles = float3(0, MouselookAng.x, 0);
 			}
 
 			float3 moveVec = 0;
@@ -61,7 +63,7 @@ namespace Prototyping {
 
 			moveVec = normalizesafe(moveVec) * BaseSpeed * (Input.GetButton("Sprint") ? FastSpeedMultiplier : 1);
 
-			moveVec = transform.TransformVector(moveVec);
+			moveVec = Head.transform.TransformVector(moveVec);
 
 			transform.localPosition += (Vector3)moveVec * Time.deltaTime;
 
