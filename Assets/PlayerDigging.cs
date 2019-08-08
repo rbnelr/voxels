@@ -33,6 +33,7 @@ public class PlayerDigging : MonoBehaviour {
 		if (!digging && anim_t < 0.1f && Input.GetMouseButton(0))
 			digging = true;
 		
+		bool digging_hit = false;
 		{
 			anim_t += Time.deltaTime / AnimLength * (digging ? +1f : -1f);
 			anim_t = saturate(anim_t);
@@ -48,25 +49,26 @@ public class PlayerDigging : MonoBehaviour {
 			Pickaxe.transform.localPosition = pos;
 			Pickaxe.transform.localRotation = ori;
 		
-			if (digging && anim_t >= 1f)
+			if (digging && anim_t >= 1f) {
 				digging = false;
+				digging_hit = true;
+			}
 		}
 
-		//var ray = cam.ViewportPointToRay(float3(.5f, .5f, 0f));
-		//
-		//CanDig = Physics.Raycast(ray, out RaycastHit hit, Reach);
-		//if ( && CanDig) {
-		//	var chunk = hit.transform.GetComponent<Chunk>();
-		//	if (chunk != null) {
-		//		VoxelEdit.SubstractSphere(hit.point, Radius);
-		//	}
-		//	
-		//	var rigidbody = hit.transform.GetComponent<Rigidbody>();
-		//	if (rigidbody != null) {
-		//		rigidbody.AddForceAtPosition(ray.direction * HitForce, hit.point);
-		//	}
-		//}
-		//
-		//Position = hit.point;
+		if (digging_hit) {
+			var ray = cam.ViewportPointToRay(float3(.5f, .5f, 0f));
+		
+			if (Physics.Raycast(ray, out RaycastHit hit, Reach)) {
+				var chunk = hit.transform.GetComponent<Chunk>();
+				if (chunk != null) {
+					VoxelEdit.SubstractSphere(hit.point, Radius);
+				}
+			
+				var rigidbody = hit.transform.GetComponent<Rigidbody>();
+				if (rigidbody != null) {
+					rigidbody.AddForceAtPosition(ray.direction * HitForce, hit.point);
+				}
+			}
+		}
 	}
 }

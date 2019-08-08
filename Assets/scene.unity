@@ -758,6 +758,12 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 643450880}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &674318072 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7851447207517671133, guid: 282fb3ab0de53ba4c987399329b132cc,
+    type: 3}
+  m_PrefabInstance: {fileID: 756316228}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &756316228
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1074,9 +1080,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ffced64aef0178d4f9b80283c2ec6ea3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Reach: 4
+  Pickaxe: {fileID: 674318072}
+  Reach: 1.5
   Radius: 1.5
   HitForce: 1
+  AnimLength: 0.15
+  AxeRot: 70
+  AxeDepth: 0.7
+  AnimationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1 &1687319026
 GameObject:
   m_ObjectHideFlags: 0
