@@ -1098,7 +1098,7 @@ MonoBehaviour:
     type: 3}
   repeat: 0
   rpm: 5
-  velocity: 30
+  velocity: 20
   key: 98
 --- !u!114 &1375430563
 MonoBehaviour:
