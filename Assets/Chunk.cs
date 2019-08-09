@@ -67,15 +67,11 @@ public class Chunk : MonoBehaviour {
 	public MeshCollider MeshCollider;
 
 	void Start () {
-		MeshCollider = GetComponent<MeshCollider>();
-
-		{
-			mesh = new Mesh();
-			mesh.name = "Chunk Mesh";
-			mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-			GetComponent<MeshFilter>().sharedMesh = mesh;
-			MeshCollider.sharedMesh = mesh;
-		}
+		mesh = new Mesh();
+		mesh.name = "Chunk Mesh";
+		mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+		GetComponent<MeshFilter>().sharedMesh = mesh;
+		MeshCollider.sharedMesh = mesh;
 	}
 
 	public void Dispose () {

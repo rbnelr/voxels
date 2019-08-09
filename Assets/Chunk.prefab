@@ -114,4 +114,4 @@ MonoBehaviour:
   mesh: {fileID: 0}
   Done: 0
   DeferRemesh: 0
-  MeshCollider: {fileID: 0}
+  MeshCollider: {fileID: 401240270846252968}
