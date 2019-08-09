@@ -51,7 +51,7 @@ public class Chunks : MonoBehaviour {
 			}
 		}
 
-		FinishChunkProcessing();
+		//FinishChunkProcessing();
 
 		Chunk chunkToProcess = null;
 
@@ -61,19 +61,21 @@ public class Chunks : MonoBehaviour {
 				UpdateChunk(c, ref chunkToProcess);
 			else
 				toRemove.Add(c);
-
-			if (c.DeferRemesh && chunkToProcess == null) {
-				chunkToProcess = c;
-			}
 		}
 
 		StartChunkProcessing(chunkToProcess);
 			
 		foreach (var c in toRemove) {
-			c.Dispose();
-			Destroy(c);
-			chunks.Remove(c.Index);
+			if (c != chunkInProcess) {
+				c.Dispose();
+				Destroy(c);
+				chunks.Remove(c.Index);
+			}
 		}
+	}
+
+	void LateUpdate () {
+		FinishChunkProcessing();
 	}
 
 	void LoadChunk (int3 index) {
@@ -89,6 +91,8 @@ public class Chunks : MonoBehaviour {
 	TerrainGenerator.Job genJob;
 	TerrainMesher.Job meshJob;
 
+	List<TerrainMesher.Job> remeshJobs = new List<TerrainMesher.Job>();
+
 	void UpdateChunk (Chunk c, ref Chunk chunkToProcess) {
 		if (!c.Voxels.IsCreated) {
 			if (chunkToProcess == null || c.LatestDist < chunkToProcess.LatestDist)
@@ -97,20 +101,32 @@ public class Chunks : MonoBehaviour {
 	}
 
 	void StartChunkProcessing (Chunk c) {
+		
+		remeshJobs.Clear();
+		foreach (var chunk in chunks.Values) {
+			if (chunk.DeferRemesh) {
+				chunk.DisposeMeshing();
+
+				remeshJobs.Add( TerrainMesher.StartJob(chunk, genJob) );
+			
+				chunk.DeferRemesh = false;
+			}
+		}
+
 		if (chunkInProcess == null && c != null) {
 			chunkInProcess = c;
 
 			c.DisposeMeshing();
-
-			if (!c.DeferRemesh)
-				genJob = TerrainGenerator.StartJob(c);
-
-			meshJob = TerrainMesher.StartJob(c, genJob);
 			
-			c.DeferRemesh = false;
+			genJob = TerrainGenerator.StartJob(c);
+			meshJob = TerrainMesher.StartJob(c, genJob);
 		}
 	}
 	void FinishChunkProcessing () {
+		foreach (var j in remeshJobs) {
+			j.Complete();
+		}
+
 		if (chunkInProcess != null && (genJob?.IsCompleted ?? true) && (meshJob?.IsCompleted ?? true)) {
 			genJob?.Complete();
 			meshJob?.Complete();

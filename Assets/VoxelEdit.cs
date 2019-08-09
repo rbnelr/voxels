@@ -15,7 +15,7 @@ class VoxelEdit {
 
 	public static void SubstractSphere (float3 pos, float radius) {
 		foreach (var c in Chunks.Instance.chunks.Values) {
-			if (Intersect(c.Corner, Chunk.SIZE, pos, radius)) {
+			if (Intersect(c.Corner, Chunk.SIZE, pos, radius) && c.Voxels.IsCreated) {
 				SubstractSphere(c, pos, radius);
 			}
 		}
