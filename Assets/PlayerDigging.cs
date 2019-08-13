@@ -55,6 +55,7 @@ public class PlayerDigging : MonoBehaviour {
 			}
 		}
 
+		//digging_hit = true;
 		if (digging_hit) {
 			var ray = cam.ViewportPointToRay(float3(.5f, .5f, 0f));
 		

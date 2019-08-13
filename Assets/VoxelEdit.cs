@@ -45,10 +45,14 @@ class VoxelEdit {
 					float3 dirTo = pos - voxPos;
 
 					float diggedDist = (radius - length(dirTo)) * Chunk.VOXEL_SIZE;
+					float3 normal = normalize(dirTo);
 
-					if (diggedDist >= vox.value)
-						vox.gradient = normalize(dirTo);
+					float t = saturate((radius - length(dirTo)) / radius);
 
+					diggedDist = lerp(vox.value, diggedDist, t);
+					normal = lerp(vox.gradient, normal, t);
+
+					vox.gradient = normal;
 					vox.value = max(vox.value, diggedDist);
 					
 					c.Voxels[i] = vox;

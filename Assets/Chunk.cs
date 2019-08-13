@@ -38,7 +38,7 @@ public struct Voxel {
 }
 
 public class Chunk : MonoBehaviour {
-	public const float VOXEL_SIZE = 1f; // Size of one voxel cell
+	public const float VOXEL_SIZE = .5f; // Size of one voxel cell
 	public const int VOXELS = 32; // Voxels per axis
 	public const float SIZE = VOXELS * VOXEL_SIZE; // size of the chunk on one axis
 		
@@ -60,10 +60,8 @@ public class Chunk : MonoBehaviour {
 
 	public bool Done = false;
 	public bool DeferRemesh = false;
+	public bool IsDestroyed { get; private set; } = false;
 
-	bool _disposed = false;
-	public bool IsDestroyed => _disposed;
-	
 	public MeshCollider MeshCollider;
 
 	void Start () {
@@ -75,7 +73,7 @@ public class Chunk : MonoBehaviour {
 	}
 
 	public void Dispose () {
-		_disposed = true;
+		IsDestroyed = true;
 			
 		if (mesh != null)
 			Object.Destroy(mesh);
