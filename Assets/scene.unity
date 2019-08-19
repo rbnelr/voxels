@@ -685,7 +685,7 @@ MonoBehaviour:
   Player: {fileID: 1375430559}
   TerrainGenerator: {fileID: 1345146788}
   TerrainMesher: {fileID: 1687319027}
-  AlwaysDrawChunks: 1
+  AlwaysDrawChunks: 0
 --- !u!4 &567237931
 Transform:
   m_ObjectHideFlags: 0

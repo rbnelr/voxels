@@ -109,6 +109,7 @@ public class TerrainMesher : MonoBehaviour {
 			DCMaxIterations = DCMaxIterations,
 			SurfaceEdges = c.SurfaceEdges,
 			SurfaceCells = c.SurfaceCells,
+			Voxels = c.Voxels,
 
 			Cells = c.Cells,
 		};
@@ -153,6 +154,7 @@ public class TerrainMesher : MonoBehaviour {
 		
 	public unsafe struct Cell {
 		public float3 vertex;
+		public int matID;
 
 		public int surfaceEdges;
 		public fixed int edges[12];
@@ -272,6 +274,7 @@ public class TerrainMesher : MonoBehaviour {
 		[ReadOnly] public int DCMaxIterations;
 		[ReadOnly] public NativeList<Edge> SurfaceEdges;
 		[ReadOnly] public NativeList<int> SurfaceCells;
+		public NativeArray<Voxel> Voxels;
 		public NativeArray<Cell> Cells;
 		
 		unsafe float3 MassPoint (Cell cell, out float3 normal) {
@@ -333,6 +336,10 @@ public class TerrainMesher : MonoBehaviour {
 
 			return particle;
 		}
+
+		int InterpolateMatID (int3 pos, ref Cell cell) {
+			return Voxels[_3dToFlatIndex(pos, VOXELS)].matID;
+		}
 			
 		public void Execute (int i) {
 			int indexFlat = SurfaceCells[i];
@@ -341,9 +348,17 @@ public class TerrainMesher : MonoBehaviour {
 		
 			var cell = Cells[indexFlat];
 			cell.vertex = DualContourIterative(cell, cellPos);
+			cell.matID = InterpolateMatID(cellPos, ref cell);
 			Cells[indexFlat] = cell;
 		}
 	}
+
+	static readonly Color[] MatColors = new Color[] {
+		Color.white,
+		Color.red,
+		Color.green,
+		Color.blue,
+	};
 
 	[BurstCompile]
 	public struct GenerateMeshJob : IJob {
@@ -367,7 +382,7 @@ public class TerrainMesher : MonoBehaviour {
 			return Cells[cellPosFlat];
 		}
 			
-		public void EmitTriangle (Cell a, Cell b, Cell c, Color col) {
+		public void EmitTriangle (Cell a, Cell b, Cell c) {
 			if (all(a.vertex == b.vertex) || all(a.vertex == c.vertex))
 				return; // degenerate triangle
 		
@@ -388,10 +403,10 @@ public class TerrainMesher : MonoBehaviour {
 			uv.Add(float2(0.5f));
 			uv.Add(float2(0.5f));
 			uv.Add(float2(0.5f));
-		
-			colors.Add(col);
-			colors.Add(col);
-			colors.Add(col);
+			
+			colors.Add(MatColors[a.matID]);
+			colors.Add(MatColors[b.matID]);
+			colors.Add(MatColors[c.matID]);
 		
 			int indx = triangles.Length;
 			triangles.Add(indx++);
@@ -422,11 +437,11 @@ public class TerrainMesher : MonoBehaviour {
 					var d = GetCell(edgePos, j,k, 3);
 						
 					if (edge.flip) {
-						EmitTriangle(b, a, d, Color.white);
-						EmitTriangle(d, a, c, Color.white);
+						EmitTriangle(b, a, d);
+						EmitTriangle(d, a, c);
 					} else {
-						EmitTriangle(a, b, c, Color.white);
-						EmitTriangle(c, b, d, Color.white);
+						EmitTriangle(a, b, c);
+						EmitTriangle(c, b, d);
 					}
 				}
 			}

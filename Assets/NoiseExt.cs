@@ -264,11 +264,11 @@ public static class NoiseExt {
 	const float _fixBugY = 19f / 7f / 100f;
 	const float _fixBugZ = 7f / 13f / 100f;
 	
-	public static NoiseSample1 snoise (float pos, float invFreq) {
+	public static NoiseSample1 snoise (float pos, float invFreq, int seed=0) {
 		var sampl = new NoiseSample1();
 	#if true
 		float3 deriv3;
-		sampl.val = noise.snoise(float3(pos * invFreq + _fixBugX, 0f, 0f), out deriv3);
+		sampl.val = noise.snoise(float3(pos * invFreq + _fixBugX, 0f, (float)seed), out deriv3);
 		sampl.gradient = deriv3.x * invFreq;
 	#else // this source code looks like it is slower then the 3d version above
 		float3 val = noise.srdnoise(float2(v * invFreq, 0));
@@ -277,11 +277,11 @@ public static class NoiseExt {
 	#endif
 		return sampl;
 	}
-	public static NoiseSample2 snoise (float2 pos, float2 invFreq) {
+	public static NoiseSample2 snoise (float2 pos, float2 invFreq, int seed=0) {
 		var sampl = new NoiseSample2();
 	#if true
 		float3 deriv3;
-		sampl.val = noise.snoise(float3(pos * invFreq + float2(_fixBugX, _fixBugY), 0f), out deriv3);
+		sampl.val = noise.snoise(float3(pos * invFreq + float2(_fixBugX, _fixBugY), (float)seed), out deriv3);
 		sampl.gradient = deriv3.xy * invFreq;
 	#else // this source code looks like it is slower then the 3d version above
 		float3 val = noise.srdnoise(v * invFreq);
@@ -290,55 +290,61 @@ public static class NoiseExt {
 	#endif
 		return sampl;
 	}
-	public static NoiseSample3 snoise (float3 pos, float3 invFreq) {
+	public static NoiseSample3 snoise (float3 pos, float3 invFreq, int seed=0) {
 		var sampl = new NoiseSample3();
-		sampl.val = noise.snoise(pos * invFreq + float3(_fixBugX, _fixBugY, _fixBugZ), out sampl.gradient);
+		sampl.val = noise.snoise(pos * invFreq + float3(_fixBugX, _fixBugY, _fixBugZ + (float)seed), out sampl.gradient);
 		sampl.gradient *= invFreq;
 		return sampl;
 	}
 	
-	public static NoiseSample1 fsnoise (float pos, float freq, int octaves, bool dampen=false) {
+	public static NoiseSample1 fsnoise (float pos, float freq, int octaves, int seed=0, bool dampen=false) {
 		float dampened = dampen ? freq : 1f;
 		float invFreq = 1f / freq;
 
-		var total = snoise(pos, invFreq);
+		seed *= 4; // make relation between fsnoise(_, _, 10, 0) and fsnoise(_, _, 10, 1) less obvious (the latter would just be the octave 1 level with lower freq
+
+		var total = snoise(pos, invFreq, seed);
 		float amplitude = 1.0f;
 		float range = 1.0f;
 		for (int i=1; i<octaves; ++i) {
 			invFreq *= 2;
 			amplitude *= 0.5f;
 			range += amplitude;
-			total += snoise(pos, invFreq) * amplitude;
+			total += snoise(pos, invFreq, seed + i) * amplitude;
 		}
 		return total * (dampened / range);
 	}
-	public static NoiseSample2 fsnoise (float2 pos, float freq, int octaves, bool dampen=false) {
+	public static NoiseSample2 fsnoise (float2 pos, float freq, int octaves, int seed=0, bool dampen=false) {
 		float dampened = dampen ? freq : 1f;
 		float invFreq = 1f / freq;
 
-		var total = snoise(pos, invFreq);
+		seed *= 4; // make relation between fsnoise(_, _, 10, 0) and fsnoise(_, _, 10, 1) less obvious (the latter would just be the octave 1 level with lower freq
+
+		var total = snoise(pos, invFreq, seed);
 		float amplitude = 1.0f;
 		float range = 1.0f;
 		for (int i=1; i<octaves; ++i) {
 			invFreq *= 2;
 			amplitude *= 0.5f;
 			range += amplitude;
-			total += snoise(pos, invFreq) * amplitude;
+			total += snoise(pos, invFreq, seed + i) * amplitude;
 		}
 		return total * (dampened / range);
 	}
-	public static NoiseSample3 fsnoise (float3 pos, float freq, int octaves, bool dampen=false) {
+	public static NoiseSample3 fsnoise (float3 pos, float freq, int octaves, int seed=0, bool dampen=false) {
 		float dampened = dampen ? freq : 1f;
 		float invFreq = 1f / freq;
 
-		var total = snoise(pos, invFreq);
+		seed *= 4; // make relation between fsnoise(_, _, 10, 0) and fsnoise(_, _, 10, 1) less obvious (the latter would just be the octave 1 level with lower freq
+
+		var total = snoise(pos, invFreq, seed);
 		float amplitude = 1.0f;
 		float range = 1.0f;
 		for (int i=1; i<octaves; ++i) {
 			invFreq *= 2;
 			amplitude *= 0.5f;
 			range += amplitude;
-			total += snoise(pos, invFreq) * amplitude;
+			total += snoise(pos, invFreq, seed + i) * amplitude;
 		}
 		return total * (dampened / range);
 	}

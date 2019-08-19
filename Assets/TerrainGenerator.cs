@@ -26,7 +26,7 @@ public struct TerrainGeneratorStruct {
 	public NoiseSample3 Surface (float3 pos) {
 		float2 pos2d = pos.xz;
 
-		var height = fsnoise(pos2d + 3000, 4000, 6, true) * 0.1f;
+		var height = fsnoise(pos2d + 3000, 4000, 6, dampen: true) * 0.1f;
 		//float height = fractal(pos2d + 3000, 4, 4000) * 0.1f;
 
 		var val = pos.y - height;
@@ -64,6 +64,18 @@ public struct TerrainGeneratorStruct {
 	public NoiseSample3 Cave (float3 pos) {
 		return fsnoise(pos, 600, 3);
 	}
+
+	struct Material {
+		public int id;
+		public float amount;
+	}
+
+	void MaterialMax (int id, float amount, ref int maxID, ref float maxAmount) { // swap a and b so that a always has the larger amount
+		bool swap = amount > maxAmount;
+		maxID     = select(maxID,     id,     swap);
+		maxAmount = select(maxAmount, amount, swap);
+	}
+
 	public Voxel Generate (float3 pos) {
 		//float3 normal = float3(1, 7, 2);
 		//return new Voxel {
@@ -84,10 +96,22 @@ public struct TerrainGeneratorStruct {
 		cave = min(cave, Cube(pos, float3(14f, 0.5f, 10.6f), 5f));
 		cave = min(cave, Sphere(pos, float3(14f, 0.7f, 10.6f - 8f), 3f));
 		cave = max(cave, -1 * Sphere(pos, float3(15.82f, 16.79f, -12.94f), 12.94f-7.23f));
+		
+		int matID = 0;
+		float matAmount = 0;
+		
+		float mat1Val = saturate(fsnoise(pos, 20, 2, 11).val - 0.2f);
+		float mat2Val = saturate(fsnoise(pos, 20, 2, 12).val - 0.5f);
+		float mat3Val = saturate(fsnoise(pos, 20, 2, 13).val - 0.5f) * 3;
 
+		MaterialMax(1, mat1Val, ref matID, ref matAmount); 
+		MaterialMax(2, mat2Val, ref matID, ref matAmount); 
+		MaterialMax(3, mat3Val, ref matID, ref matAmount); 
+		
 		return new Voxel {
 			value = cave.val,
 			gradient = cave.gradient,
+			matID = matID,
 		};
 			
 		//var val = smooth_union(surf, cave, 2000f);
