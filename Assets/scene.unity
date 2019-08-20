@@ -922,7 +922,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 0
+    m_Type: 1
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
@@ -1097,7 +1097,7 @@ MonoBehaviour:
   PrefabToSpawn: {fileID: 7208124878471882387, guid: eec16d2461f314f4bba96416e032f4e3,
     type: 3}
   repeat: 0
-  rpm: 5
+  rpm: 20
   velocity: 20
   key: 98
 --- !u!114 &1375430563
