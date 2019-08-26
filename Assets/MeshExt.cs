@@ -89,6 +89,10 @@ public static class MeshExt {
 		assignNativeListToBuffer(uvs, ref buffer);
 		mesh.SetUVs(0, buffer);
 	}
+	public static unsafe void SetUvsNative (this Mesh mesh, int channel, NativeList<float4> uvs, ref List<Vector4> buffer) {
+		assignNativeListToBuffer(uvs, ref buffer);
+		mesh.SetUVs(0, buffer);
+	}
 	public static unsafe void SetColorsNative (this Mesh mesh, NativeList<Color> colors, ref List<Color> buffer) {
 		assignNativeListToBuffer(colors, ref buffer);
 		mesh.SetColors(buffer);

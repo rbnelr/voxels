@@ -922,7 +922,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 1
+    m_Type: 0
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
@@ -1034,6 +1034,7 @@ GameObject:
   - component: {fileID: 1375430561}
   - component: {fileID: 1375430562}
   - component: {fileID: 1375430563}
+  - component: {fileID: 1375430564}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -1080,7 +1081,7 @@ MonoBehaviour:
     x: 0
     y: 0
   TestFall: 0
-  TestFallSpeed: -50
+  TestFallSpeed: -30
   Head: {fileID: 524679818}
 --- !u!114 &1375430562
 MonoBehaviour:
@@ -1143,6 +1144,24 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &1375430564
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1375430559}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24108f1ba68ac7247992d4b356c2c67a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  PrefabToSpawn: {fileID: 5075470619358338156, guid: a87934027d22c514e9cce9b7ec24b1c6,
+    type: 3}
+  repeat: 0
+  rpm: 20
+  velocity: 3
+  key: 102
 --- !u!1 &1687319026
 GameObject:
   m_ObjectHideFlags: 0

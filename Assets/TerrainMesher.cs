@@ -50,15 +50,16 @@ public class MeshData {
 			Profiler.BeginSample("normals");
 				mesh.SetNormalsNative(normals, ref normalsBuf);
 			Profiler.EndSample();
-			Profiler.BeginSample("uv");
-				mesh.SetUvsNative(0, uv, ref uvBuf);
-			Profiler.EndSample();
 			Profiler.BeginSample("colors");
 				mesh.SetColorsNative(colors, ref colorsBuf);
 			Profiler.EndSample();
 			Profiler.BeginSample("triangles");
 				mesh.SetTrianglesNative(triangles, 0, ref trianglesBuf);
 			Profiler.EndSample();
+		Profiler.EndSample();
+		
+		Profiler.BeginSample("uv");
+			mesh.SetUvsNative(0, uv, ref uvBuf);
 		Profiler.EndSample();
 		
 		chunk.MeshCollider.sharedMesh = mesh;
@@ -353,12 +354,12 @@ public class TerrainMesher : MonoBehaviour {
 		}
 	}
 
-	static readonly Color[] MatColors = new Color[] {
-		Color.white,
-		Color.red,
-		Color.green,
-		Color.blue,
-	};
+	//static readonly Color[] MatColors = new Color[] {
+	//	Color.white,
+	//	Color.red,
+	//	Color.green,
+	//	Color.blue,
+	//};
 
 	[BurstCompile]
 	public struct GenerateMeshJob : IJob {
@@ -404,9 +405,12 @@ public class TerrainMesher : MonoBehaviour {
 			uv.Add(float2(0.5f));
 			uv.Add(float2(0.5f));
 			
-			colors.Add(MatColors[a.matID]);
-			colors.Add(MatColors[b.matID]);
-			colors.Add(MatColors[c.matID]);
+			//colors.Add(MatColors[a.matID]);
+			//colors.Add(MatColors[b.matID]);
+			//colors.Add(MatColors[c.matID]);
+			colors.Add(Color.white);
+			colors.Add(Color.white);
+			colors.Add(Color.white);
 		
 			int indx = triangles.Length;
 			triangles.Add(indx++);
