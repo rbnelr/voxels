@@ -60,22 +60,22 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets\Bomb.cs" />
-    <Compile Include="Assets\Chunk.cs" />
-    <Compile Include="Assets\Chunks.cs" />
-    <Compile Include="Assets\DeleteAfterTime.cs" />
-    <Compile Include="Assets\DiggingTest.cs" />
-    <Compile Include="Assets\Flare.cs" />
-    <Compile Include="Assets\MeshExt.cs" />
-    <Compile Include="Assets\NoiseExt.cs" />
-    <Compile Include="Assets\Player.cs" />
-    <Compile Include="Assets\PlayerDigging.cs" />
-    <Compile Include="Assets\ShootObject.cs" />
-    <Compile Include="Assets\TerrainGenerator.cs" />
-    <Compile Include="Assets\TerrainMesher.cs" />
-    <Compile Include="Assets\VoxelEdit.cs" />
-    <None Include="Assets\Terrain.shader" />
+    <Compile Include="Assets\Scripts\Bomb.cs" />
+    <Compile Include="Assets\Scripts\Chunk.cs" />
+    <Compile Include="Assets\Scripts\Chunks.cs" />
+    <Compile Include="Assets\Scripts\DeleteAfterTime.cs" />
+    <Compile Include="Assets\Scripts\DiggingTest.cs" />
+    <Compile Include="Assets\Scripts\Flare.cs" />
+    <Compile Include="Assets\Scripts\MeshExt.cs" />
+    <Compile Include="Assets\Scripts\NoiseExt.cs" />
+    <Compile Include="Assets\Scripts\Player.cs" />
+    <Compile Include="Assets\Scripts\PlayerDigging.cs" />
+    <Compile Include="Assets\Scripts\ShootObject.cs" />
+    <Compile Include="Assets\Scripts\TerrainGenerator.cs" />
+    <Compile Include="Assets\Scripts\TerrainMesher.cs" />
+    <Compile Include="Assets\Scripts\VoxelEdit.cs" />
     <None Include="Assets\TODO.txt" />
+    <None Include="Assets\TerrainShader.shader" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
