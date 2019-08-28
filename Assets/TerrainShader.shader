@@ -6,9 +6,15 @@
 		_Glossiness("Smoothness", Range(0,1)) = 0.5
 		_Metallic("Metallic", Range(0,1)) = 0.0
 
-		_MainTex("Albedo (RGB)", 2D) = "white" {}
-		_TextureScale("TextureScale", Float) = 1
-		_TextureAspect("TextureAspect", Float) = 1
+		_Mat0TexA		("_Mat0TexA", 2D) = "white" {}
+		_Mat0TexScale	("_Mat0TexScale", Float) = 1
+		_Mat0TexAspect	("_Mat0TexAspect", Float) = 1
+		_Mat0Color		("_Mat0Color", Color) = (1,1,1,1)
+
+		_Mat1TexA		("_Mat1TexA", 2D) = "white" {}
+		_Mat1TexScale	("_Mat1TexScale", Float) = 1
+		_Mat1TexAspect	("_Mat1TexAspect", Float) = 1
+		_Mat1Color		("_Mat1Color", Color) = (1,1,1,1)
 	}
 		SubShader
 	{
@@ -24,9 +30,15 @@
 		// Use shader model 3.0 target, to get nicer looking lighting
 		#pragma target 3.0
 
-		half _TextureScale;
-		half _TextureAspect;
-		sampler2D _MainTex;
+		sampler2D	_Mat0TexA;
+		half		_Mat0TexScale;
+		half		_Mat0TexAspect;
+		half4		_Mat0Color;
+
+		sampler2D	_Mat1TexA;
+		half		_Mat1TexScale;
+		half		_Mat1TexAspect;
+		half4		_Mat1Color;
 
 		struct Input {
 			float3 worldPos;
@@ -46,21 +58,35 @@
 			// put more per-instance properties here
 		UNITY_INSTANCING_BUFFER_END(Props)
 
-		void surf(Input IN, inout SurfaceOutputStandard o)
-		{
+		float4 sampleMaterial (Input IN, float3 blendCoeff, sampler2D texA, half scale, half aspect, half4 col) {
+			float2 scale2d = scale * float2(1, aspect);
+
+			float4 texX = tex2D(texA, IN.worldPos.zy / scale2d) * blendCoeff.x;
+			float4 texY = tex2D(texA, IN.worldPos.xz / scale2d) * blendCoeff.y;
+			float4 texZ = tex2D(texA, IN.worldPos.xy / scale2d) * blendCoeff.z;
+
+			return (texX + texY + texZ) * col;
+		}
+
+		void surf(Input IN, inout SurfaceOutputStandard o) {
 			o.Metallic = _Metallic;
 			o.Smoothness = _Glossiness;
 
-			float3 axisCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
+			float3 blendCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
 
-			float2 scale = _TextureScale * float2(1, _TextureAspect);
+			float4 mat0 = sampleMaterial(IN, blendCoeff, _Mat0TexA, _Mat0TexScale, _Mat0TexAspect, _Mat0Color);
+			float4 mat1 = sampleMaterial(IN, blendCoeff, _Mat1TexA, _Mat1TexScale, _Mat1TexAspect, _Mat1Color);
 
-			float4 texX = tex2D(_MainTex, IN.worldPos.zy / scale) * axisCoeff.x;
-			float4 texY = tex2D(_MainTex, IN.worldPos.xz / scale) * axisCoeff.y;
-			float4 texZ = tex2D(_MainTex, IN.worldPos.xy / scale) * axisCoeff.z;
-			float4 texCombined = texX + texY + texZ;
+			float blend = IN.worldNormal.y * IN.worldNormal.y * 1.3f - 0.3f;
 
-			fixed4 c = texCombined * _Color;
+			blend = smoothstep(0,1, blend);
+			blend = smoothstep(0,1, blend);
+			blend = smoothstep(0,1, blend);
+			blend = smoothstep(0,1, blend);
+
+			float4 mat = lerp(mat0, mat1, saturate(blend));
+
+			fixed4 c = mat * _Color;
 			o.Albedo = c.rgb;
 			o.Alpha = c.a;
 		}
