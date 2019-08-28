@@ -77,7 +77,7 @@
 			float4 mat0 = sampleMaterial(IN, blendCoeff, _Mat0TexA, _Mat0TexScale, _Mat0TexAspect, _Mat0Color);
 			float4 mat1 = sampleMaterial(IN, blendCoeff, _Mat1TexA, _Mat1TexScale, _Mat1TexAspect, _Mat1Color);
 
-			float blend = IN.worldNormal.y * IN.worldNormal.y * 1.3f - 0.3f;
+			float blend = abs(IN.worldNormal.y) * IN.worldNormal.y * 1.3f - 0.3f;
 
 			blend = smoothstep(0,1, blend);
 			blend = smoothstep(0,1, blend);
