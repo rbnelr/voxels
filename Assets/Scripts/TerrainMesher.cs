@@ -348,7 +348,7 @@ public class TerrainMesher : MonoBehaviour {
 						
 				float distance = length(cell.vertex - edge.pos);
 				
-				sumNormal += edge.normal / distance;
+				sumNormal += edge.normal / (distance + 0.01f);
 			}
 
 			return normalize(sumNormal);

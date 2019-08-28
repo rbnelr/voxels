@@ -51,7 +51,7 @@
 			o.Metallic = _Metallic;
 			o.Smoothness = _Glossiness;
 
-			float3 axisCoeff = saturate(abs(normalize(IN.worldNormal)) * 1.2 - 0.2);
+			float3 axisCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
 
 			float2 scale = _TextureScale * float2(1, _TextureAspect);
 
