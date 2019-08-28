@@ -3,6 +3,14 @@ Textures
 Material Blending in Shader
 Player Movement (Walking, Jumping)
 
+GPU mesh tesselation (add more terrain detail on gpu)
+ requires the worldgen code to also exist on the gpu, or for the gpu to have access to a finer voxel grid
+ this is going to be complicated, since it needs to know about terrain edits too
 
+Add terrain edit deltas for lag-free 1-frame terrain edits
+ update some voxels and generate the mesh for them and then delete the triangles in the original mesh by setting their vertex indices to 0 (degenerate triangles)
+ Does this cause even more seam complications? (man..., marching cubes seems appealing now)
+
+Reimplement LOD
 
 // https://www.wildtextures.com/category/stone/

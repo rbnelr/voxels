@@ -311,6 +311,8 @@ public class TerrainMesher : MonoBehaviour {
 
 			//cell.normal = normal;
 			
+			float vertexRange = 0.5f - 0.001f;
+
 			int iter = 0;
 			while (iter++ < DCMaxIterations) {
 				float3 sumForce = 0;
@@ -333,7 +335,7 @@ public class TerrainMesher : MonoBehaviour {
 				
 				particle += sumForce * DCIterStrength;
 				
-				particle = clamp(particle, (float3)cellPos - 0.5f, (float3)cellPos + 0.5f);
+				particle = clamp(particle, (float3)cellPos - vertexRange, (float3)cellPos + vertexRange);
 			}
 
 			return particle;
@@ -409,14 +411,16 @@ public class TerrainMesher : MonoBehaviour {
 			vertices.Add(c.vertex * Chunk.VOXEL_SIZE);
 		
 			var flatNormal = normalize(cross(b.vertex - a.vertex, c.vertex - a.vertex));
+			
+			float NormalSmooth = 1.0f;
+
+			normals.Add(lerp(flatNormal, a.normal, NormalSmooth));
+			normals.Add(lerp(flatNormal, b.normal, NormalSmooth));
+			normals.Add(lerp(flatNormal, c.normal, NormalSmooth));
 		
-			//normals.Add(lerp(flatNormal, a.normal, NormalSmooth));
-			//normals.Add(lerp(flatNormal, b.normal, NormalSmooth));
-			//normals.Add(lerp(flatNormal, c.normal, NormalSmooth));
-		
-			normals.Add(a.normal);
-			normals.Add(b.normal);
-			normals.Add(c.normal);
+			//normals.Add(a.normal);
+			//normals.Add(b.normal);
+			//normals.Add(c.normal);
 
 			//normals.Add(flatNormal);
 			//normals.Add(flatNormal);
