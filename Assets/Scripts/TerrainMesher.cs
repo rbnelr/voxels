@@ -11,15 +11,19 @@ using static VoxelUtil;
 public class MeshData {
 	public NativeList<float3> vertices;
 	public NativeList<float3> normals;
-	public NativeList<float2> uv;
+	//public NativeList<float2> uv;
 	public NativeList<Color>  colors;
 	public NativeList<int>    triangles;
+	public NativeList<float>  matIDs; // float because there is no SetIntArray in MaterialPropertyBlock
+
+	public MaterialPropertyBlock MPB;
 			
 	static List<Vector3>	verticesBuf  = new List<Vector3>();
 	static List<Vector3>	normalsBuf   = new List<Vector3>();
-	static List<Vector2>	uvBuf        = new List<Vector2>();
+	//static List<Vector2>	uvBuf        = new List<Vector2>();
 	static List<Color>		colorsBuf    = new List<Color>();
 	static List<int>		trianglesBuf = new List<int>();
+	static List<float>		matIDsBuf	 = new List<float>();
 
 	public MeshData () {
 		int ArraySize = Chunk.VOXELS + 1;
@@ -27,17 +31,21 @@ public class MeshData {
 				
 		vertices  = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
 		normals   = new NativeList<float3> (vertexAlloc, Allocator.Persistent);
-		uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
+		//uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
 		colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
 		triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
+		matIDs    = new NativeList<float>  (vertexAlloc, Allocator.Persistent);
+
+		MPB = new MaterialPropertyBlock();
 	}
 
 	public void Dispose () {
 		if (vertices  .IsCreated) vertices  .Dispose();
 		if (normals   .IsCreated) normals   .Dispose();
-		if (uv        .IsCreated) uv        .Dispose();
+		//if (uv        .IsCreated) uv        .Dispose();
 		if (colors    .IsCreated) colors    .Dispose();
 		if (triangles .IsCreated) triangles .Dispose();
+		if (matIDs    .IsCreated) matIDs    .Dispose();
 	}
 		
 	public void SetMesh (Chunk chunk, Mesh mesh) {
@@ -58,8 +66,12 @@ public class MeshData {
 			Profiler.EndSample();
 		Profiler.EndSample();
 		
-		Profiler.BeginSample("uv");
-			mesh.SetUvsNative(0, uv, ref uvBuf);
+		//Profiler.BeginSample("uv");
+		//	mesh.SetUvsNative(0, uv, ref uvBuf);
+		//Profiler.EndSample();
+		
+		Profiler.BeginSample("matIDs");
+			MPB.SetFloatArrayNative("matIDs", matIDs, ref matIDsBuf);
 		Profiler.EndSample();
 		
 		chunk.MeshCollider.sharedMesh = mesh;
@@ -121,9 +133,10 @@ public class TerrainMesher : MonoBehaviour {
 				
 			vertices  = j.MeshData.vertices ,	
 			normals	  = j.MeshData.normals	,	
-			uv		  = j.MeshData.uv		,	
+			//uv		  = j.MeshData.uv		,	
 			colors	  = j.MeshData.colors	,	
-			triangles = j.MeshData.triangles,	
+			triangles = j.MeshData.triangles,
+			matIDs    = j.MeshData.matIDs   ,
 		};
 			
 		var findSurfaceH = findSurface  .ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, 64, terrGen?.Handle ?? default);
@@ -382,15 +395,16 @@ public class TerrainMesher : MonoBehaviour {
 
 	[BurstCompile]
 	public struct GenerateMeshJob : IJob {
-		[ReadOnly] public NativeList<int> SurfaceEdgePositions;
-		[ReadOnly] public NativeList<Edge> SurfaceEdges;
-		[ReadOnly] public NativeArray<Cell> Cells;
+		[ReadOnly]  public NativeList<int>    SurfaceEdgePositions;
+		[ReadOnly]  public NativeList<Edge>   SurfaceEdges;
+		[ReadOnly]  public NativeArray<Cell>  Cells;
 			
 		[WriteOnly] public NativeList<float3> vertices;
 		[WriteOnly] public NativeList<float3> normals;
-		[WriteOnly] public NativeList<float2> uv;
+		//[WriteOnly] public NativeList<float2> uv;
 		[WriteOnly] public NativeList<Color>  colors;
-		public NativeList<int>    triangles;
+					public NativeList<int>    triangles;
+		[WriteOnly] public NativeList<float>  matIDs;
 			
 		Cell GetCell (int3 edgePos, int j, int k, int cell_i) {
 			int3 cellPos = edgePos;
@@ -426,9 +440,9 @@ public class TerrainMesher : MonoBehaviour {
 			//normals.Add(flatNormal);
 			//normals.Add(flatNormal);
 		
-			uv.Add(float2(0.5f));
-			uv.Add(float2(0.5f));
-			uv.Add(float2(0.5f));
+			//uv.Add(float2(0.5f));
+			//uv.Add(float2(0.5f));
+			//uv.Add(float2(0.5f));
 			
 			//colors.Add(MatColors[a.matID]);
 			//colors.Add(MatColors[b.matID]);
@@ -441,6 +455,10 @@ public class TerrainMesher : MonoBehaviour {
 			triangles.Add(indx++);
 			triangles.Add(indx++);
 			triangles.Add(indx++);
+
+			matIDs.Add(a.matID);
+			matIDs.Add(b.matID);
+			matIDs.Add(c.matID);
 		}
 
 		public void Execute () {

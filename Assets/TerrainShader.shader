@@ -15,6 +15,8 @@
 		_Mat1TexScale	("_Mat1TexScale", Float) = 1
 		_Mat1TexAspect	("_Mat1TexAspect", Float) = 1
 		_Mat1Color		("_Mat1Color", Color) = (1,1,1,1)
+
+		_MatIDs
 	}
 		SubShader
 	{

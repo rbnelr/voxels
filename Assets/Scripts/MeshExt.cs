@@ -101,4 +101,11 @@ public static class MeshExt {
 		assignNativeListToBuffer(triangles, ref buffer);
 		mesh.SetTriangles(buffer, submesh);
 	}
+	
+	public static unsafe void SetFloatArrayNative (this MaterialPropertyBlock MPB, string name, NativeList<float> data, ref List<float> buffer) {
+		if (data.Length > 0) { // SetFloatArray with length 0 not allowed
+			assignNativeListToBuffer(data, ref buffer);
+			MPB.SetFloatArray(name, buffer);
+		}
+	}
 }
