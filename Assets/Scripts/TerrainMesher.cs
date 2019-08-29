@@ -14,16 +14,14 @@ public class MeshData {
 	//public NativeList<float2> uv;
 	public NativeList<Color>  colors;
 	public NativeList<int>    triangles;
-	public NativeList<float>  matIDs; // float because there is no SetIntArray in MaterialPropertyBlock
-
-	public MaterialPropertyBlock MPB;
-			
+	public NativeList<float4> materials; // packed into float4 and sent via uv channels
+	
 	static List<Vector3>	verticesBuf  = new List<Vector3>();
 	static List<Vector3>	normalsBuf   = new List<Vector3>();
 	//static List<Vector2>	uvBuf        = new List<Vector2>();
 	static List<Color>		colorsBuf    = new List<Color>();
 	static List<int>		trianglesBuf = new List<int>();
-	static List<float>		matIDsBuf	 = new List<float>();
+	static List<Vector4>	materialsBuf = new List<Vector4>();
 
 	public MeshData () {
 		int ArraySize = Chunk.VOXELS + 1;
@@ -34,9 +32,7 @@ public class MeshData {
 		//uv        = new NativeList<float2> (vertexAlloc, Allocator.Persistent);
 		colors    = new NativeList<Color>  (vertexAlloc, Allocator.Persistent);
 		triangles = new NativeList<int>	   (vertexAlloc, Allocator.Persistent);
-		matIDs    = new NativeList<float>  (vertexAlloc, Allocator.Persistent);
-
-		MPB = new MaterialPropertyBlock();
+		materials = new NativeList<float4> (vertexAlloc, Allocator.Persistent);
 	}
 
 	public void Dispose () {
@@ -45,7 +41,7 @@ public class MeshData {
 		//if (uv        .IsCreated) uv        .Dispose();
 		if (colors    .IsCreated) colors    .Dispose();
 		if (triangles .IsCreated) triangles .Dispose();
-		if (matIDs    .IsCreated) matIDs    .Dispose();
+		if (materials .IsCreated) materials .Dispose();
 	}
 		
 	public void SetMesh (Chunk chunk, Mesh mesh) {
@@ -64,14 +60,9 @@ public class MeshData {
 			Profiler.BeginSample("triangles");
 				mesh.SetTrianglesNative(triangles, 0, ref trianglesBuf);
 			Profiler.EndSample();
-		Profiler.EndSample();
-		
-		//Profiler.BeginSample("uv");
-		//	mesh.SetUvsNative(0, uv, ref uvBuf);
-		//Profiler.EndSample();
-		
-		Profiler.BeginSample("matIDs");
-			MPB.SetFloatArrayNative("matIDs", matIDs, ref matIDsBuf);
+			Profiler.BeginSample("materials");
+				mesh.SetUvsNative(0, materials, ref materialsBuf);
+			Profiler.EndSample();
 		Profiler.EndSample();
 		
 		chunk.MeshCollider.sharedMesh = mesh;
@@ -136,7 +127,7 @@ public class TerrainMesher : MonoBehaviour {
 			//uv		  = j.MeshData.uv		,	
 			colors	  = j.MeshData.colors	,	
 			triangles = j.MeshData.triangles,
-			matIDs    = j.MeshData.matIDs   ,
+			materials = j.MeshData.materials,
 		};
 			
 		var findSurfaceH = findSurface  .ScheduleAppend(c.SurfaceEdgePositions, EDGES_TOTAL, 64, terrGen?.Handle ?? default);
@@ -404,7 +395,7 @@ public class TerrainMesher : MonoBehaviour {
 		//[WriteOnly] public NativeList<float2> uv;
 		[WriteOnly] public NativeList<Color>  colors;
 					public NativeList<int>    triangles;
-		[WriteOnly] public NativeList<float>  matIDs;
+		[WriteOnly] public NativeList<float4> materials;
 			
 		Cell GetCell (int3 edgePos, int j, int k, int cell_i) {
 			int3 cellPos = edgePos;
@@ -456,9 +447,9 @@ public class TerrainMesher : MonoBehaviour {
 			triangles.Add(indx++);
 			triangles.Add(indx++);
 
-			matIDs.Add(a.matID);
-			matIDs.Add(b.matID);
-			matIDs.Add(c.matID);
+			materials.Add(float4((float)a.matID, 0,0,0));
+			materials.Add(float4((float)b.matID, 0,0,0));
+			materials.Add(float4((float)c.matID, 0,0,0));
 		}
 
 		public void Execute () {

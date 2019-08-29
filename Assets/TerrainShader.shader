@@ -15,8 +15,6 @@
 		_Mat1TexScale	("_Mat1TexScale", Float) = 1
 		_Mat1TexAspect	("_Mat1TexAspect", Float) = 1
 		_Mat1Color		("_Mat1Color", Color) = (1,1,1,1)
-
-		_MatIDs
 	}
 		SubShader
 	{
@@ -27,7 +25,7 @@
 		// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
 		#pragma exclude_renderers gles
 		// Physically based Standard lighting model, and enable shadows on all light types
-		#pragma surface surf Standard fullforwardshadows
+		#pragma surface surf Standard fullforwardshadows vertex:vert
 
 		// Use shader model 3.0 target, to get nicer looking lighting
 		#pragma target 3.0
@@ -42,13 +40,6 @@
 		half		_Mat1TexAspect;
 		half4		_Mat1Color;
 
-		struct Input {
-			float3 worldPos;
-			float3 worldNormal;
-
-			//float2 uv_MainTex;
-		};
-
 		half _Glossiness;
 		half _Metallic;
 		fixed4 _Color;
@@ -60,7 +51,22 @@
 		// put more per-instance properties here
 		UNITY_INSTANCING_BUFFER_END(Props)
 
-		float4 sampleMaterial (Input IN, float3 blendCoeff, sampler2D texA, half scale, half aspect, half4 col) {
+		struct Input {
+			float3 worldPos;
+			float3 worldNormal;
+
+			float material;
+		};
+
+		void vert (inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			o.material = v.texcoord.x;
+		}
+	
+		// Get Material albedo color by sampling the 2d texture with 3d positions by projecting the texture from the x y and z axis and blending those based on the surface normal in a way that tried to prevent stretching
+		float4 sampleMaterial (Input IN, sampler2D texA, half scale, half aspect, half4 col) {
+			float3 blendCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
+
 			float2 scale2d = scale * float2(1, aspect);
 
 			float4 texX = tex2D(texA, IN.worldPos.zy / scale2d) * blendCoeff.x;
@@ -74,12 +80,11 @@
 			o.Metallic = _Metallic;
 			o.Smoothness = _Glossiness;
 
-			float3 blendCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
+			float4 mat0 = sampleMaterial(IN, _Mat0TexA, _Mat0TexScale, _Mat0TexAspect, _Mat0Color);
+			float4 mat1 = sampleMaterial(IN, _Mat1TexA, _Mat1TexScale, _Mat1TexAspect, _Mat1Color);
 
-			float4 mat0 = sampleMaterial(IN, blendCoeff, _Mat0TexA, _Mat0TexScale, _Mat0TexAspect, _Mat0Color);
-			float4 mat1 = sampleMaterial(IN, blendCoeff, _Mat1TexA, _Mat1TexScale, _Mat1TexAspect, _Mat1Color);
-
-			float blend = abs(IN.worldNormal.y) * IN.worldNormal.y * 1.3f - 0.3f;
+			//float blend = abs(IN.worldNormal.y) * IN.worldNormal.y * 1.3f - 0.3f;
+			float blend = IN.material <= 0.5f ? 0 : 1;
 
 			blend = smoothstep(0,1, blend);
 			blend = smoothstep(0,1, blend);
