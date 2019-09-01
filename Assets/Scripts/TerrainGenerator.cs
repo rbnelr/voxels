@@ -107,10 +107,13 @@ public struct TerrainGeneratorStruct {
 		float mat1Val = saturate(fsnoise(pos, 20, 2, 11).val - 0.2f);
 		float mat2Val = saturate(fsnoise(pos, 20, 2, 12).val - 0.5f);
 		float mat3Val = saturate(fsnoise(pos, 20, 2, 13).val - 0.5f) * 3;
-
+		
 		MaterialMax(1, mat1Val, ref matID, ref matAmount); 
 		MaterialMax(2, mat2Val, ref matID, ref matAmount); 
-		MaterialMax(3, mat3Val, ref matID, ref matAmount); 
+		MaterialMax(3, mat3Val, ref matID, ref matAmount);
+
+		//float3 matTestNormal = float3(1, 7, 2);
+		//float matTest = dot(pos, matTestNormal);
 		
 		return new Voxel {
 			value = cave.val,

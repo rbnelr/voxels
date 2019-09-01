@@ -155,12 +155,12 @@ public class TerrainMesher : MonoBehaviour {
 		public bool flip; // needs to be flipped to get correct front facing dir
 		public float3 pos; // position of approximated iso crossing
 		public float3 normal; // normalized gradient at approximated iso crossing
+		public int matID; // edge always seperates a empty voxel and a material voxel, this is the mat id of the material
 	}
 		
 	public unsafe struct Cell {
 		public float3 vertex;
 		public float3 normal;
-		public int matID;
 
 		public int surfaceEdges;
 		public fixed int edges[12];
@@ -245,6 +245,7 @@ public class TerrainMesher : MonoBehaviour {
 					e.flip = (a.value > b.value) ^ flip; 
 					e.pos = lerp((float3)ia, (float3)ib, t) - 0.5f;
 					e.normal = normalizesafe(lerp(a.gradient, b.gradient, t));
+					e.matID = (a.value > b.value) ? b.matID : a.matID; // take matID of the side of the active edge that is not in the "air"
 						
 					SurfaceEdges.Add(e);
 				}
@@ -372,17 +373,9 @@ public class TerrainMesher : MonoBehaviour {
 			var cell = Cells[indexFlat];
 			cell.vertex = DualContourIterative(cell, cellPos);
 			cell.normal = InterpolateNormal(cell);
-			cell.matID = InterpolateMatID(cellPos, ref cell);
 			Cells[indexFlat] = cell;
 		}
 	}
-
-	//static readonly Color[] MatColors = new Color[] {
-	//	Color.white,
-	//	Color.red,
-	//	Color.green,
-	//	Color.blue,
-	//};
 
 	[BurstCompile]
 	public struct GenerateMeshJob : IJob {
@@ -407,7 +400,7 @@ public class TerrainMesher : MonoBehaviour {
 			return Cells[cellPosFlat];
 		}
 			
-		public void EmitTriangle (Cell a, Cell b, Cell c) {
+		public void EmitTriangle (Cell a, Cell b, Cell c, int matID) {
 			if (all(a.vertex == b.vertex) || all(a.vertex == c.vertex))
 				return; // degenerate triangle
 		
@@ -435,9 +428,6 @@ public class TerrainMesher : MonoBehaviour {
 			//uv.Add(float2(0.5f));
 			//uv.Add(float2(0.5f));
 			
-			//colors.Add(MatColors[a.matID]);
-			//colors.Add(MatColors[b.matID]);
-			//colors.Add(MatColors[c.matID]);
 			colors.Add(Color.white);
 			colors.Add(Color.white);
 			colors.Add(Color.white);
@@ -447,9 +437,9 @@ public class TerrainMesher : MonoBehaviour {
 			triangles.Add(indx++);
 			triangles.Add(indx++);
 
-			materials.Add(float4((float)a.matID, 0,0,0));
-			materials.Add(float4((float)b.matID, 0,0,0));
-			materials.Add(float4((float)c.matID, 0,0,0));
+			materials.Add(float4((float)matID, 0,0,0));
+			materials.Add(float4((float)matID, 0,0,0));
+			materials.Add(float4((float)matID, 0,0,0));
 		}
 
 		public void Execute () {
@@ -475,11 +465,11 @@ public class TerrainMesher : MonoBehaviour {
 					var d = GetCell(edgePos, j,k, 3);
 						
 					if (edge.flip) {
-						EmitTriangle(b, a, d);
-						EmitTriangle(d, a, c);
+						EmitTriangle(b, a, d, edge.matID);
+						EmitTriangle(d, a, c, edge.matID);
 					} else {
-						EmitTriangle(a, b, c);
-						EmitTriangle(c, b, d);
+						EmitTriangle(a, b, c, edge.matID);
+						EmitTriangle(c, b, d, edge.matID);
 					}
 				}
 			}

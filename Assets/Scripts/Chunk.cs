@@ -27,13 +27,6 @@ public struct Voxel {
 	public float3 gradient;
 
 	public int matID;
-	
-	public static Voxel Lerp (Voxel a, Voxel b, float t) {
-		a.value = a.value + (b.value - a.value) * t;
-		a.gradient = a.gradient + (b.gradient - a.gradient) * t;
-		a.matID = select(a.matID, b.matID, t > 0.5f);
-		return a;
-	}
 
 	public override string ToString () {
 		return value.ToString();

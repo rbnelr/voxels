@@ -1,6 +1,9 @@
 
-Textures
-Material Blending in Shader
+*Textures
+
+*Material Blending in Shader
+
+
 Player Movement (Walking, Jumping)
 
 GPU mesh tesselation (add more terrain detail on gpu)
