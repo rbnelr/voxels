@@ -15,6 +15,8 @@
 		_Mat1TexScale	("_Mat1TexScale", Float) = 1
 		_Mat1TexAspect	("_Mat1TexAspect", Float) = 1
 		_Mat1Color		("_Mat1Color", Color) = (1,1,1,1)
+
+		_Antistretch    ("_Antistretch", Float) = 0.3
 	}
 		SubShader
 	{
@@ -39,6 +41,8 @@
 		half		_Mat1TexScale;
 		half		_Mat1TexAspect;
 		half4		_Mat1Color;
+
+		half		_Antistretch;
 
 		half _Glossiness;
 		half _Metallic;
@@ -65,13 +69,14 @@
 	
 		// Get Material albedo color by sampling the 2d texture with 3d positions by projecting the texture from the x y and z axis and blending those based on the surface normal in a way that tried to prevent stretching
 		float4 sampleMaterial (Input IN, sampler2D texA, half scale, half aspect, half4 col) {
-			float3 blendCoeff = saturate(normalize(abs(IN.worldNormal) * 1.3 - 0.3));
+			float3 antistretchCoeff = saturate(normalize(abs(IN.worldNormal) * (1 + _Antistretch) - _Antistretch));
+			antistretchCoeff = normalize(antistretchCoeff);
 
 			float2 scale2d = scale * float2(1, aspect);
 
-			float4 texX = tex2D(texA, IN.worldPos.zy / scale2d) * blendCoeff.x;
-			float4 texY = tex2D(texA, IN.worldPos.xz / scale2d) * blendCoeff.y;
-			float4 texZ = tex2D(texA, IN.worldPos.xy / scale2d) * blendCoeff.z;
+			float4 texX = tex2D(texA, IN.worldPos.zy / scale2d) * antistretchCoeff.x;
+			float4 texY = tex2D(texA, IN.worldPos.xz / scale2d) * antistretchCoeff.y;
+			float4 texZ = tex2D(texA, IN.worldPos.xy / scale2d) * antistretchCoeff.z;
 
 			return (texX + texY + texZ) * col;
 		}
