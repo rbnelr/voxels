@@ -1,5 +1,6 @@
 
 *Textures
+*Texture Atlasing to allow arbitrary many materials to be used in shader
 
 Player Movement (Walking, Jumping)
 

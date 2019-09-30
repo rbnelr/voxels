@@ -71,11 +71,12 @@
     <Compile Include="Assets\Scripts\Player.cs" />
     <Compile Include="Assets\Scripts\PlayerDigging.cs" />
     <Compile Include="Assets\Scripts\ShootObject.cs" />
+    <Compile Include="Assets\Scripts\TerrainAtlasGenerator.cs" />
     <Compile Include="Assets\Scripts\TerrainGenerator.cs" />
     <Compile Include="Assets\Scripts\TerrainMesher.cs" />
     <Compile Include="Assets\Scripts\VoxelEdit.cs" />
     <None Include="Assets\TODO.txt" />
-    <None Include="Assets\TerrainShader.shader" />
+    <None Include="Assets\Scripts\TerrainShader.shader" />
     <None Include="Assets\NewSurfaceShader.shader" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>

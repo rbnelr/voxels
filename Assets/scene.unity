@@ -997,6 +997,69 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 756316228}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1008240076
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1008240078}
+  - component: {fileID: 1008240077}
+  m_Layer: 0
+  m_Name: TerrainAtlasGenerator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1008240077
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008240076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3d6b3b499e6010499c5e21b1d8aa567, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Materials:
+  - Texture: {fileID: 2800000, guid: f3b97dc2e89f175488aa98af4c997ae7, type: 3}
+    Tint: {r: 1, g: 1, b: 1, a: 0}
+    Scale: 8
+    Aspect: 2
+  - Texture: {fileID: 2800000, guid: c18875b991919eb40a7809b922a9747b, type: 3}
+    Tint: {r: 0.4292453, g: 1, b: 0.4635798, a: 0}
+    Scale: 8
+    Aspect: 0.5
+  - Texture: {fileID: 2800000, guid: da32c8c9b6c93de47949a2ea53265aac, type: 3}
+    Tint: {r: 1, g: 1, b: 1, a: 0}
+    Scale: 1
+    Aspect: 1
+  - Texture: {fileID: 2800000, guid: 8fe1a07832534fd4284b696fc75efd76, type: 3}
+    Tint: {r: 1, g: 1, b: 1, a: 0}
+    Scale: 1
+    Aspect: 1
+  Mat: {fileID: 2100000, guid: 3ac567ce7c9aef4499f957bdd3d313af, type: 2}
+  Atlas: {fileID: 0}
+  AtlasSize: 1024
+--- !u!4 &1008240078
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008240076}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -36.63549, y: -1.7155464, z: 32.111794}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 8
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1277188379
 GameObject:
   m_ObjectHideFlags: 0
@@ -1185,7 +1248,7 @@ MonoBehaviour:
   BaseSpeed: 4
   FastSpeedMultiplier: 4
   MouselookSensitiviy: 0.01
-  Mouselook: 1
+  Mouselook: 0
   MouselookAng:
     x: 0
     y: 0
