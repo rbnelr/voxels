@@ -52,10 +52,18 @@ class VoxelEdit {
 					diggedDist = lerp(vox.value, diggedDist, t);
 					normal = lerp(vox.gradient, normal, t);
 
+					bool voxel_was_removed = vox.value < 0 && diggedDist >= 0;
+
 					vox.gradient = normal;
 					vox.value = max(vox.value, diggedDist);
 					
 					c.Voxels[i] = vox;
+					
+					if (voxel_was_removed) {
+						float3 pos_world = (float3)index * Chunk.VOXEL_SIZE + c.Corner;
+
+						FallingRocks.Instance.AddRock(pos_world);
+					}
 				}
 			}
 		}

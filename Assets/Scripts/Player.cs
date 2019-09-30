@@ -40,7 +40,7 @@ namespace Prototyping {
 				Cursor.lockState = CursorLockMode.None;
 			}
 			
-			if (Input.GetKey(KeyCode.F2))
+			if (Input.GetKeyDown(KeyCode.F2))
 				Mouselook = !Mouselook;
 
 			Cursor.lockState = Mouselook ? CursorLockMode.Locked : CursorLockMode.None;

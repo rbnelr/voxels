@@ -65,6 +65,8 @@
     <Compile Include="Assets\Scripts\Chunks.cs" />
     <Compile Include="Assets\Scripts\DeleteAfterTime.cs" />
     <Compile Include="Assets\Scripts\DiggingTest.cs" />
+    <Compile Include="Assets\Scripts\FPSDisplay.cs" />
+    <Compile Include="Assets\Scripts\FallingRocks.cs" />
     <Compile Include="Assets\Scripts\Flare.cs" />
     <Compile Include="Assets\Scripts\MeshExt.cs" />
     <Compile Include="Assets\Scripts\NoiseExt.cs" />
@@ -77,7 +79,6 @@
     <Compile Include="Assets\Scripts\VoxelEdit.cs" />
     <None Include="Assets\TODO.txt" />
     <None Include="Assets\Scripts\TerrainShader.shader" />
-    <None Include="Assets\NewSurfaceShader.shader" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
@@ -141,9 +142,6 @@
     <Reference Include="Unity.CollabProxy.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.CollabProxy.Editor.dll</HintPath>
     </Reference>
-    <Reference Include="Unity.Postprocessing.Editor">
-      <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Postprocessing.Editor.dll</HintPath>
-    </Reference>
     <Reference Include="Unity.Entities.BuildUtils">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Entities.BuildUtils.dll</HintPath>
     </Reference>
@@ -164,9 +162,6 @@
     </Reference>
     <Reference Include="Unity.2D.Sprite.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.2D.Sprite.Editor.dll</HintPath>
-    </Reference>
-    <Reference Include="Unity.Postprocessing.Runtime">
-      <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.Postprocessing.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="Unity.2D.Tilemap.Editor">
       <HintPath>C:/Users/uidn7241/Desktop/Unity/voxel_caves/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
