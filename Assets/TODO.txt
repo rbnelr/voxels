@@ -1,10 +1,17 @@
 
 *Textures
 
-*Material Blending in Shader
-
-
 Player Movement (Walking, Jumping)
+
+Better worldgen:
+ add numeric gradient calc and see if there are any disadvantages to it
+ figure out techniques to do:
+  non "circular" caves, ie. ground closer to ceiling
+  flat planes (like lakes) in cave
+
+ add feature that regenerates the world on worldgen parameter changes
+
+Material Transitions (in Shader)
 
 GPU mesh tesselation (add more terrain detail on gpu)
  requires the worldgen code to also exist on the gpu, or for the gpu to have access to a finer voxel grid
@@ -15,5 +22,7 @@ Add terrain edit deltas for lag-free 1-frame terrain edits
  Does this cause even more seam complications? (man..., marching cubes seems appealing now)
 
 Reimplement LOD
+
+Voxel based lighting (mainly GI (raycasting?))
 
 // https://www.wildtextures.com/category/stone/

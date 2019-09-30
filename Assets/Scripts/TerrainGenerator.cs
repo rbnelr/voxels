@@ -102,25 +102,35 @@ public struct TerrainGeneratorStruct {
 		cave = max(cave, -1 * Sphere(pos, float3(15.82f, 16.79f, -12.94f), 12.94f-7.23f));
 		
 		int matID = 0;
-		float matAmount = 0;
-		
-		float mat1Val = saturate(fsnoise(pos, 20, 2, 11).val - 0.2f);
-		float mat2Val = saturate(fsnoise(pos, 20, 2, 12).val - 0.5f);
-		float mat3Val = saturate(fsnoise(pos, 20, 2, 13).val - 0.5f) * 3;
-		
-		MaterialMax(1, mat1Val, ref matID, ref matAmount); 
-		MaterialMax(2, mat2Val, ref matID, ref matAmount); 
-		MaterialMax(3, mat3Val, ref matID, ref matAmount);
 
-		//float3 matTestNormal = float3(1, 7, 2);
-		//float matTest = dot(pos, matTestNormal);
+		{ // ores/rock types
+			float matAmount = 0;
 		
+			float mat1Val = saturate(fsnoise(pos, 20, 2, 11).val - 0.2f);
+			float mat2Val = saturate(fsnoise(pos, 20, 2, 12).val - 0.5f);
+			float mat3Val = saturate(fsnoise(pos, 20, 2, 13).val - 0.5f) * 3;
+		
+			MaterialMax(1, mat1Val, ref matID, ref matAmount); 
+			MaterialMax(2, mat2Val, ref matID, ref matAmount); 
+			MaterialMax(3, mat3Val, ref matID, ref matAmount);
+		}
+
+		{ // grass on floor
+			bool top = normalizesafe(cave.gradient).y > 0.85f && cave.val < .99f && cave.val > -0.3f;
+			matID = top ? 1 : 0;
+			//if (top && cave.val > -0.001f)
+			//	cave -= 1;
+		}
+
+		var val = cave;
+		//var val = smooth_union(surf.val, cave.val, 2000f);
+
 		return new Voxel {
-			value = cave.val,
-			gradient = cave.gradient,
+			value = val.val,
+			gradient = val.gradient,
 			matID = matID,
 		};
-			
+		
 		//var val = smooth_union(surf, cave, 2000f);
 		//
 		////val += fractal(pos + 400, 5, 220) * 0.15f;
