@@ -27,7 +27,7 @@
 		float4		_MaterialTints[32];
 
 		float		_Antistretch;
-		float		_AtlasUVBias;
+		//float		_AtlasUVBias;
 
 		float _Glossiness;
 		float _Metallic;
@@ -62,8 +62,10 @@
 
 			// --- Add uv bias to prevent visible seams, this could probalby be avoided by adding repeating the pixels around the packed textures in the atlas, but currently the black borders the atlas packer puts in the atlas are visible
 			// Seams still appearing, not sure why they happen
-			uv *= size_in_atlas - _AtlasUVBias*2;
-			uv += offs_in_atlas + _AtlasUVBias;
+			// -> Caused by bilinear filtering not being compatible with atlassing
+			// can be fixed -> https://www.gamedev.net/forums/topic/602143-texture-atlas-seam-issue/ not worth to try to do in unity for now
+			uv *= size_in_atlas;
+			uv += offs_in_atlas;
 
 			return uv;
 		}
@@ -76,7 +78,7 @@
 			float4 texX = tex2D(atlas, uv_in_atlas(IN.worldPos.zy, atlas_rect, scale)) * antistretchCoeff.x;
 			float4 texY = tex2D(atlas, uv_in_atlas(IN.worldPos.xz, atlas_rect, scale)) * antistretchCoeff.y;
 			float4 texZ = tex2D(atlas, uv_in_atlas(IN.worldPos.xy, atlas_rect, scale)) * antistretchCoeff.z;
-
+			
 			return (texX + texY + texZ) * tint;
 		}
 

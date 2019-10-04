@@ -19,6 +19,8 @@ public class TerrainAtlasGenerator : MonoBehaviour {
 	public Texture2D Atlas;
 	public int AtlasSize = 1024;
 
+	Rect[] rects;
+
 	private void Start () {
 		Texture2D[] texs = Materials.Select(x => x.Texture).ToArray();
 
@@ -29,8 +31,10 @@ public class TerrainAtlasGenerator : MonoBehaviour {
 		// --TODO: Remove potential duplicates? Since we might use the same texture with different tint or scale as a different material
 		// --Or does PackTextures do that already (just give us the same rects for identlical textures?)
 		// -> PackTextures DOES remove duplicates, but this is not documented
-		var rects = Atlas.PackTextures(texs, 8, AtlasSize, true);
+		rects = Atlas.PackTextures(texs, 8, AtlasSize, true);
 		
+	}
+	private void Update () {
 		Mat.SetTexture("_Atlas", Atlas);
 		Mat.SetVectorArray("_AtlasUVRects", rects.Select(x => new Vector4(x.width, x.height, x.x, x.y)).ToArray());
 		Mat.SetVectorArray("_MaterialScales", Materials.Select(x =>
