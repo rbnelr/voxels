@@ -15,14 +15,15 @@ public class FallingRocks : MonoBehaviour {
 
 	Unity.Mathematics.Random rand = new Unity.Mathematics.Random(1);
 
-	public GameObject RockPrefab;
+	public ParticleSystem Particles;
 	
 	public void AddRock (float3 pos_world) {
-		var go = Instantiate(RockPrefab);
-		go.transform.position = pos_world;
-		go.GetComponent<Rigidbody>().velocity = rand.NextFloat3Direction() * rand.NextFloat(.5f, 3);
-		go.transform.rotation = rand.NextQuaternionRotation();
-
-		Rocks.Add(go);
+		var ep = new ParticleSystem.EmitParams {
+			position = pos_world,
+			velocity = rand.NextFloat3Direction() * rand.NextFloat(.5f, 3f),
+			rotation3D = ((Quaternion)rand.NextQuaternionRotation()).eulerAngles,
+			angularVelocity3D = Quaternion.AngleAxis(rand.NextFloat(-.2f, 2f), rand.NextFloat3Direction()).eulerAngles,
+		};
+		Particles.Emit(ep, 1);
 	}
 }

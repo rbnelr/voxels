@@ -113,11 +113,14 @@ public struct TerrainGeneratorStruct {
 		// grass overrides ores/rock types
 		{ // grass on floor
 			bool top = normalizesafe(cave.gradient).y > 0.85f && cave.val < .99f && cave.val > -0.3f;
-			if (top)
+			if (top && (cave.val < 0.03f && cave.val > -0.03f))
 				matID = 1;
-			//if (top && cave.val > -0.001f)
-			//	cave -= 1;
+			if (top && cave.val < 0.03f)
+				cave -= 0.03f;
 		}
+
+		if (matID > 1 && cave.val < 0.05f)
+			cave -= 0.05f;
 
 		var val = cave;
 		//var val = smooth_union(surf.val, cave.val, 2000f);
