@@ -21,6 +21,8 @@ class VoxelEdit {
 		}
 	}
 
+	public static uint seed = 1;
+
 	public static void SubstractSphere (Chunk c, float3 pos, float radius) {
 		int VOXELS = Chunk.VOXELS + 2;
 
@@ -32,6 +34,8 @@ class VoxelEdit {
 		int3 hi = (int3)ceil (pos + radius) + 1;
 		lo = clamp(lo, 0, VOXELS);
 		hi = clamp(hi, 0, VOXELS);
+
+		var rand = new Unity.Mathematics.Random(seed++);
 		
 		for (int z=lo.z; z<hi.z; ++z) { 
 			for (int y=lo.y; y<hi.y; ++y) { 
@@ -59,7 +63,7 @@ class VoxelEdit {
 					
 					c.Voxels[i] = vox;
 					
-					if (voxel_was_removed) {
+					if (voxel_was_removed && rand.NextInt(10) < 2) {
 						float3 pos_world = (float3)index * Chunk.VOXEL_SIZE + c.Corner;
 
 						FallingRocks.Instance.AddRock(pos_world);
